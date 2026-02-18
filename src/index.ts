@@ -7,6 +7,8 @@ import {
   sendStoriesRange,
   parseCommand,
   getCommandRange,
+  isFlushCacheCommand,
+  sendMessage,
 } from './telegram';
 
 const ONE_DAY_IN_SECONDS = 60 * 60 * 24;
@@ -68,6 +70,22 @@ async function setCommandCache(
   } catch (error) {
     console.warn(`Error setting cache for ${command}:`, error);
   }
+}
+
+async function flushCache(kv: KVNamespace): Promise<number> {
+  let deleted = 0;
+  let cursor: string | undefined;
+
+  do {
+    const list = await kv.list({ cursor });
+    for (const key of list.keys) {
+      await kv.delete(key.name);
+      deleted++;
+    }
+    cursor = list.list_complete ? undefined : list.cursor;
+  } while (cursor);
+
+  return deleted;
 }
 
 async function processStory(
@@ -184,6 +202,19 @@ async function handleCommand(
   chatId: number
 ): Promise<void> {
   const config = getConfig(env);
+
+  if (isFlushCacheCommand(command)) {
+    console.log(`Processing flush cache command for chat ${chatId}`);
+    const deleted = await flushCache(env.HN_STORIES);
+    await sendMessage(
+      config.telegramBotToken,
+      String(chatId),
+      `✅ 已清除 ${deleted} 条缓存记录`
+    );
+    console.log(`Flushed ${deleted} cache entries`);
+    return;
+  }
+
   const range = getCommandRange(command);
 
   if (!range) {

@@ -47,6 +47,10 @@ export function getCommandRange(command: string): { start: number; end: number }
   }
 }
 
+export function isFlushCacheCommand(command: string): boolean {
+  return command === '/flushcache';
+}
+
 export async function sendMessage(
   botToken: string,
   chatId: string,
