@@ -1,5 +1,5 @@
-1: top10hn - Get top 1-10 Hacker News stories
-2: top10ars - Get top 10 Ars Technica articles
-3: flushcache - Clear all cache entries
-4: btc - Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX)
-5: /exrate - Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND)
+top10hn - Get top 1-10 Hacker News stories
+top10ars - Get top 10 Ars Technica articles
+flushcache - Clear all cache entries
+btc - Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX)
+exrate - Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND)
