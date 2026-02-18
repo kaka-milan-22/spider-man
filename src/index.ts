@@ -2,12 +2,14 @@ import { Env, ProcessedStory, HNStory, TelegramUpdate } from './types';
 import { getConfig } from './config';
 import { getTopStories, getStoriesByRange } from './hn-api';
 import { extractKeywordsFromUrl } from './keywords';
+import { fetchCryptoPrices, formatCryptoPrices } from './crypto';
 import {
   sendDigest,
   sendStoriesRange,
   parseCommand,
   getCommandRange,
   isFlushCacheCommand,
+  isCryptoCommand,
   sendMessage,
 } from './telegram';
 
@@ -212,6 +214,15 @@ async function handleCommand(
       `✅ 已清除 ${deleted} 条缓存记录`
     );
     console.log(`Flushed ${deleted} cache entries`);
+    return;
+  }
+
+  if (isCryptoCommand(command)) {
+    console.log(`Processing crypto command for chat ${chatId}`);
+    const prices = await fetchCryptoPrices();
+    const message = formatCryptoPrices(prices);
+    await sendMessage(config.telegramBotToken, String(chatId), message);
+    console.log(`Sent ${prices.length} crypto prices`);
     return;
   }
 

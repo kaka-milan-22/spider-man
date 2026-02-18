@@ -51,6 +51,10 @@ export function isFlushCacheCommand(command: string): boolean {
   return command === '/flushcache';
 }
 
+export function isCryptoCommand(command: string): boolean {
+  return command === '/btc';
+}
+
 export async function sendMessage(
   botToken: string,
   chatId: string,
