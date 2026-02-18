@@ -1,16 +1,16 @@
-const COINGECKO_API = 'https://api.coingecko.com/api/v3/simple/price';
+const BINANCE_API = 'https://api.binance.com/api/v3/ticker/24hr';
 
-const COIN_IDS: Record<string, string> = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  BNB: 'binancecoin',
-  SOL: 'solana',
-  TON: 'the-open-network',
-  TRX: 'tron',
-  DOT: 'polkadot',
-  LINK: 'chainlink',
-  AVAX: 'avalanche-2',
-};
+const SYMBOLS = [
+  { symbol: 'BTC', pair: 'BTCUSDT' },
+  { symbol: 'ETH', pair: 'ETHUSDT' },
+  { symbol: 'BNB', pair: 'BNBUSDT' },
+  { symbol: 'SOL', pair: 'SOLUSDT' },
+  { symbol: 'TON', pair: 'TONUSDT' },
+  { symbol: 'TRX', pair: 'TRXUSDT' },
+  { symbol: 'DOT', pair: 'DOTUSDT' },
+  { symbol: 'LINK', pair: 'LINKUSDT' },
+  { symbol: 'AVAX', pair: 'AVAXUSDT' },
+];
 
 export interface CryptoPrice {
   symbol: string;
@@ -18,40 +18,43 @@ export interface CryptoPrice {
   change24h: number;
 }
 
-export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
-  try {
-    const ids = Object.values(COIN_IDS).join(',');
-    const url = `${COINGECKO_API}?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
+interface BinanceTicker {
+  symbol: string;
+  lastPrice: string;
+  priceChangePercent: string;
+}
 
-    const response = await fetch(url, {
+async function fetchTicker(pair: string): Promise<CryptoPrice | null> {
+  try {
+    const response = await fetch(`${BINANCE_API}?symbol=${pair}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)',
       },
     });
-
     if (!response.ok) {
-      console.warn(`CoinGecko API error: ${response.status}`);
-      return [];
+      console.warn(`Binance API error for ${pair}: ${response.status}`);
+      return null;
     }
-
-    const data = await response.json() as Record<string, { usd: number; usd_24h_change?: number }>;
-    const results: CryptoPrice[] = [];
-
-    for (const [symbol, id] of Object.entries(COIN_IDS)) {
-      if (data[id]?.usd !== undefined) {
-        results.push({
-          symbol,
-          price: data[id].usd,
-          change24h: data[id].usd_24h_change ?? 0,
-        });
-      }
-    }
-
-    return results;
+    const data = (await response.json()) as BinanceTicker;
+    return {
+      symbol: pair.replace('USDT', ''),
+      price: parseFloat(data.lastPrice),
+      change24h: parseFloat(data.priceChangePercent),
+    };
   } catch (error) {
-    console.warn('Error fetching crypto prices:', error);
-    return [];
+    console.warn(`Error fetching ${pair}:`, error);
+    return null;
   }
+}
+
+export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
+  const promises = SYMBOLS.map(async ({ symbol, pair }) => {
+    const result = await fetchTicker(pair);
+    return result ? { ...result, symbol } : null;
+  });
+
+  const results = await Promise.all(promises);
+  return results.filter((p): p is CryptoPrice => p !== null);
 }
 
 export function formatCryptoPrices(prices: CryptoPrice[]): string {
