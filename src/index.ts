@@ -12,6 +12,8 @@ import {
   isCryptoCommand,
   sendMessage,
 } from './telegram';
+import { getArsTopStories } from './ars-api';
+import { formatArsArticles } from './formatters';
 
 const ONE_DAY_IN_SECONDS = 60 * 60 * 24;
 const SEVEN_DAYS_IN_SECONDS = ONE_DAY_IN_SECONDS * 7;
@@ -223,6 +225,15 @@ async function handleCommand(
     const message = formatCryptoPrices(prices);
     await sendMessage(config.telegramBotToken, String(chatId), message);
     console.log(`Sent ${prices.length} crypto prices`);
+    return;
+  }
+
+  // Handle Ars Technica command
+  if (command === '/top10ars') {
+    const articles = await getArsTopStories(env.HN_STORIES);
+    const message = formatArsArticles(articles);
+    await sendMessage(config.telegramBotToken, String(chatId), message);
+    console.log(`Sent ${articles.length} Ars Technica articles`);
     return;
   }
 

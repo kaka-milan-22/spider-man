@@ -1,4 +1,4 @@
-import { ProcessedStory } from './types';
+import { ProcessedStory, ArsArticle } from './types';
 
 export function formatStoryMessage(
   story: ProcessedStory,
@@ -89,4 +89,20 @@ function escapeMarkdown(text: string): string {
     .replace(/_/g, '\\_')
     .replace(/\*/g, '\\*')
     .replace(/`/g, '\\`');
+}
+
+export function formatArsArticles(articles: ArsArticle[]): string {
+  if (articles.length === 0) {
+    return '📰 *Ars Technica Top 10*\n\nNo articles found.';
+  }
+
+  const header = '📰 *Ars Technica Top 10*\n\n';
+  
+  const articlesText = articles
+    .map((article, index) => {
+      return `${index + 1}. [${escapeMarkdown(article.title)}](${article.url})`;
+    })
+    .join('\n\n');
+
+  return header + articlesText;
 }
