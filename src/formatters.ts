@@ -97,12 +97,44 @@ export function formatArsArticles(articles: ArsArticle[]): string {
   }
 
   const header = '📰 *Ars Technica Top 10*\n\n';
-  
+
   const articlesText = articles
     .map((article, index) => {
-      return `${index + 1}. [${escapeMarkdown(article.title)}](${article.url})`;
+      const title = `${index + 1}. [${escapeMarkdown(article.title)}](${article.url})`;
+      const excerpt = article.excerpt ? `\n   📝 ${escapeMarkdown(article.excerpt.substring(0, 150))}${article.excerpt.length > 150 ? '...' : ''}` : '';
+      const date = article.publishedAt ? `\n   📅 ${formatArsDate(article.publishedAt)}` : '';
+      return title + excerpt + date;
     })
     .join('\n\n');
 
-  return header + articlesText;
+  const message = header + articlesText;
+
+  // Telegram message limit is 4096 characters
+  if (message.length > 4000) {
+    const truncated = articles.slice(0, 7);
+    const truncatedText = truncated
+      .map((article, index) => {
+        const title = `${index + 1}. [${escapeMarkdown(article.title)}](${article.url})`;
+        const excerpt = article.excerpt ? `\n   📝 ${escapeMarkdown(article.excerpt.substring(0, 100))}...` : '';
+        return title + excerpt;
+      })
+      .join('\n\n');
+    return header + truncatedText + '\n\n_(Message truncated. Showing top 7 stories.)_';
+  }
+
+  return message;
+}
+
+function formatArsDate(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return dateStr;
+  }
 }
