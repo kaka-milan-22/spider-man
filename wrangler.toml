@@ -6,11 +6,12 @@ compatibility_date = "2024-01-01"
 [triggers]
 crons = ["30 2 * * *"]
 
-# KV Namespace for deduplication and caching
+# KV Namespace for deduplication
+# Replace with your actual KV namespace ID after creation
 [[kv_namespaces]]
 binding = "HN_STORIES"
-id = "your-kv-namespace-id-here"
-preview_id = "your-preview-kv-namespace-id-here"
+id = "591b5c1932504c778c45d798c8aebf65"
+preview_id = "591b5c1932504c778c45d798c8aebf65"
 
 [vars]
 HN_TOP_N = "10"

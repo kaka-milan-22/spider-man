@@ -65,3 +65,32 @@ export async function getTopStories(limit: number): Promise<HNStory[]> {
 
   return stories;
 }
+
+/**
+ * Fetch stories within a range (e.g., top 11-20)
+ * @param start - Start index (1-based, inclusive)
+ * @param end - End index (1-based, inclusive)
+ */
+export async function getStoriesByRange(
+  start: number,
+  end: number
+): Promise<HNStory[]> {
+  const limit = end;
+  const storyIds = await getTopStoryIds(limit * 2);
+
+  const stories: HNStory[] = [];
+
+  for (const id of storyIds) {
+    if (stories.length >= limit) {
+      break;
+    }
+
+    const story = await getStory(id);
+    if (story && story.score > 0) {
+      stories.push(story);
+    }
+  }
+
+  // Return only the requested range (convert to 0-based)
+  return stories.slice(start - 1, end);
+}

@@ -16,7 +16,6 @@ dist/
 
 # Cloudflare
 .wrangler/
-wrangler.toml
 
 # IDE
 .vscode/

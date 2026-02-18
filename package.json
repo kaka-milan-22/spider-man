@@ -7,7 +7,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "logs": "wrangler tail",
-    "trigger": "wrangler triggers scheduled",
+    "trigger": "wrangler dev --test-scheduled",
     "setup": "npm run kv:create && echo 'Now run: npm run secrets'",
     "kv:create": "wrangler kv:namespace create HN_STORIES",
     "secrets": "echo 'Run: wrangler secret put TELEGRAM_BOT_TOKEN' && echo 'Run: wrangler secret put TELEGRAM_CHAT_ID'",

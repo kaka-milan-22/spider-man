@@ -19,6 +19,8 @@ export function formatDailyDigest(
     return '📰 *Hacker News Daily Digest*\n\nNo new top stories today.';
   }
 
+  const sortedStories = [...stories].sort((a, b) => b.score - a.score);
+
   const dateStr = date.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -28,14 +30,14 @@ export function formatDailyDigest(
 
   const header = `📰 *Hacker News Daily Digest*\n📅 ${escapeMarkdown(dateStr)}\n\n`;
 
-  const storiesText = stories
+  const storiesText = sortedStories
     .map((story, index) => formatStoryMessage(story, index + 1))
     .join('\n\n');
 
   const message = header + storiesText;
 
   if (message.length > 4000) {
-    const truncatedStories = stories.slice(0, 5);
+    const truncatedStories = sortedStories.slice(0, 5);
     const truncatedText = truncatedStories
       .map((story, index) => formatStoryMessage(story, index + 1))
       .join('\n\n');
@@ -43,6 +45,35 @@ export function formatDailyDigest(
       header +
       truncatedText +
       '\n\n_(Message truncated due to length. Showing top 5 stories.)'
+    );
+  }
+
+  return message;
+}
+
+export function formatStoriesRange(
+  stories: ProcessedStory[],
+  start: number,
+  end: number
+): string {
+  if (stories.length === 0) {
+    return `📰 *Hacker News Top ${start}-${end}*\n\nNo stories found.`;
+  }
+
+  const sortedStories = [...stories].sort((a, b) => b.score - a.score);
+
+  const header = `📰 *Hacker News Top ${start}-${end}*\n\n`;
+
+  const storiesText = sortedStories
+    .map((story, index) => formatStoryMessage(story, start + index))
+    .join('\n\n');
+
+  const message = header + storiesText;
+
+  if (message.length > 4000) {
+    return (
+      header +
+      '_Message too long. Please try a smaller range._'
     );
   }
 

@@ -51,6 +51,33 @@ export interface TelegramResponse {
   error_code?: number;
 }
 
+export interface TelegramUpdate {
+  update_id: number;
+  message?: {
+    message_id: number;
+    from?: {
+      id: number;
+      is_bot: boolean;
+      first_name: string;
+      username?: string;
+    };
+    chat: {
+      id: number;
+      type: string;
+      title?: string;
+    };
+    date: number;
+    text?: string;
+    entities?: TelegramMessageEntity[];
+  };
+}
+
+export interface TelegramMessageEntity {
+  type: 'bot_command' | 'mention' | 'hashtag' | string;
+  offset: number;
+  length: number;
+}
+
 /**
  * Environment Variables
  */

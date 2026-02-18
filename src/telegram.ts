@@ -3,10 +3,49 @@ import {
   TelegramResponse,
   TelegramAPIError,
   ProcessedStory,
+  TelegramUpdate,
 } from './types';
-import { formatDailyDigest } from './formatters';
+import { formatDailyDigest, formatStoriesRange } from './formatters';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';
+
+export function parseCommand(update: TelegramUpdate): {
+  command: string | null;
+  chatId: number;
+} | null {
+  if (!update.message?.text) {
+    return null;
+  }
+
+  const text = update.message.text;
+  const entities = update.message.entities || [];
+
+  for (const entity of entities) {
+    if (entity.type === 'bot_command') {
+      const command = text.slice(entity.offset, entity.offset + entity.length);
+      const commandName = command.split('@')[0].toLowerCase();
+      return {
+        command: commandName,
+        chatId: update.message.chat.id,
+      };
+    }
+  }
+
+  return null;
+}
+
+export function getCommandRange(command: string): { start: number; end: number } | null {
+  switch (command) {
+    case '/top10':
+      return { start: 1, end: 10 };
+    case '/top20':
+      return { start: 11, end: 20 };
+    case '/top30':
+      return { start: 21, end: 30 };
+    default:
+      return null;
+  }
+}
 
 export async function sendMessage(
   botToken: string,
@@ -58,5 +97,16 @@ export async function sendDigest(
   date: Date
 ): Promise<void> {
   const message = formatDailyDigest(stories, date);
+  await sendMessage(botToken, chatId, message);
+}
+
+export async function sendStoriesRange(
+  botToken: string,
+  chatId: string,
+  stories: ProcessedStory[],
+  start: number,
+  end: number
+): Promise<void> {
+  const message = formatStoriesRange(stories, start, end);
   await sendMessage(botToken, chatId, message);
 }

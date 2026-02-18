@@ -1,11 +1,17 @@
-import { Env, ProcessedStory, HNStory } from './types';
+import { Env, ProcessedStory, HNStory, TelegramUpdate } from './types';
 import { getConfig } from './config';
-import { getTopStories } from './hn-api';
+import { getTopStories, getStoriesByRange } from './hn-api';
 import { extractKeywordsFromUrl } from './keywords';
-import { sendDigest } from './telegram';
+import {
+  sendDigest,
+  sendStoriesRange,
+  parseCommand,
+  getCommandRange,
+} from './telegram';
 
 const ONE_DAY_IN_SECONDS = 60 * 60 * 24;
 const SEVEN_DAYS_IN_SECONDS = ONE_DAY_IN_SECONDS * 7;
+const TWO_HOURS_IN_SECONDS = 60 * 60 * 2;
 
 async function wasStorySent(kv: KVNamespace, storyId: number): Promise<boolean> {
   try {
@@ -30,6 +36,40 @@ async function markStoryAsSent(
   }
 }
 
+async function getCommandCache(
+  kv: KVNamespace,
+  command: string
+): Promise<ProcessedStory[] | null> {
+  try {
+    const key = `cache:${command}`;
+    const value = await kv.get(key, 'json');
+    if (value) {
+      console.log(`Cache hit for ${command}`);
+      return value as ProcessedStory[];
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Error getting cache for ${command}:`, error);
+    return null;
+  }
+}
+
+async function setCommandCache(
+  kv: KVNamespace,
+  command: string,
+  stories: ProcessedStory[]
+): Promise<void> {
+  try {
+    const key = `cache:${command}`;
+    await kv.put(key, JSON.stringify(stories), {
+      expirationTtl: TWO_HOURS_IN_SECONDS,
+    });
+    console.log(`Cached ${stories.length} stories for ${command}`);
+  } catch (error) {
+    console.warn(`Error setting cache for ${command}:`, error);
+  }
+}
+
 async function processStory(
   story: HNStory,
   kv: KVNamespace
@@ -51,6 +91,28 @@ async function processStory(
   const keywords = await extractKeywordsFromUrl(story.url, story.title, 10);
 
   await markStoryAsSent(kv, story.id);
+
+  return {
+    id: story.id,
+    title: story.title,
+    url: story.url,
+    score: story.score,
+    author: story.by,
+    time: story.time,
+    commentCount: story.descendants || 0,
+    keywords: keywords,
+  };
+}
+
+async function processStoryWithoutDedup(story: HNStory): Promise<ProcessedStory | null> {
+  if (!story.url) {
+    console.warn(`Story ${story.id} has no URL, skipping`);
+    return null;
+  }
+
+  console.log(`Processing story ${story.id}: ${story.title}`);
+
+  const keywords = await extractKeywordsFromUrl(story.url, story.title, 10);
 
   return {
     id: story.id,
@@ -116,6 +178,63 @@ async function handleScheduled(env: Env): Promise<void> {
   }
 }
 
+async function handleCommand(
+  env: Env,
+  command: string,
+  chatId: number
+): Promise<void> {
+  const config = getConfig(env);
+  const range = getCommandRange(command);
+
+  if (!range) {
+    return;
+  }
+
+  console.log(`Processing command: ${command} for chat ${chatId}`);
+
+  const cachedStories = await getCommandCache(env.HN_STORIES, command);
+
+  if (cachedStories) {
+    await sendStoriesRange(
+      config.telegramBotToken,
+      String(chatId),
+      cachedStories,
+      range.start,
+      range.end
+    );
+    console.log(`Sent ${cachedStories.length} cached stories for command ${command}`);
+    return;
+  }
+
+  const stories = await getStoriesByRange(range.start, range.end);
+  console.log(`Fetched ${stories.length} stories for range ${range.start}-${range.end}`);
+
+  const processedStories: ProcessedStory[] = [];
+
+  for (const story of stories) {
+    try {
+      const processed = await processStoryWithoutDedup(story);
+      if (processed) {
+        processedStories.push(processed);
+      }
+    } catch (error) {
+      console.error(`Error processing story ${story.id}:`, error);
+    }
+  }
+
+  if (processedStories.length > 0) {
+    await setCommandCache(env.HN_STORIES, command, processedStories);
+    await sendStoriesRange(
+      config.telegramBotToken,
+      String(chatId),
+      processedStories,
+      range.start,
+      range.end
+    );
+    console.log(`Sent ${processedStories.length} stories for command ${command}`);
+  }
+}
+
 export default {
   async scheduled(
     controller: ScheduledController,
@@ -146,6 +265,17 @@ export default {
             headers: { 'Content-Type': 'application/json' },
           }
         );
+      }
+
+      if (url.pathname === '/webhook' && request.method === 'POST') {
+        const update = (await request.json()) as TelegramUpdate;
+        const parsed = parseCommand(update);
+
+        if (parsed?.command) {
+          ctx.waitUntil(handleCommand(env, parsed.command, parsed.chatId));
+        }
+
+        return new Response('OK', { status: 200 });
       }
 
       return new Response('Not Found', { status: 404 });
