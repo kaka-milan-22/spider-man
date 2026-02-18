@@ -24,6 +24,25 @@ export interface ProcessedStory {
   commentCount: number;
   keywords: string[];
 }
+ 
+/**
+ * Ars Technica RSS Types
+ */
+
+export interface ArsArticle {
+  title: string;
+  url: string;
+  excerpt: string;
+  publishedAt: string;
+  author: string;
+}
+
+export class ArsAPIError extends Error {
+  constructor(message: string, public cause?: Error) {
+    super(message);
+    this.name = 'ArsAPIError';
+  }
+}
 
 /**
  * Telegram API Types
