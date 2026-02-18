@@ -1,15 +1,15 @@
-const COINCAP_API = 'https://api.coincap.io/v2/assets';
+const COINGECKO_API = 'https://api.coingecko.com/api/v3/simple/price';
 
 const COIN_IDS: Record<string, string> = {
   BTC: 'bitcoin',
   ETH: 'ethereum',
-  BNB: 'binance-coin',
+  BNB: 'binancecoin',
   SOL: 'solana',
-  TON: 'toncoin',
+  TON: 'the-open-network',
   TRX: 'tron',
   DOT: 'polkadot',
   LINK: 'chainlink',
-  AVAX: 'avalanche',
+  AVAX: 'avalanche-2',
 };
 
 export interface CryptoPrice {
@@ -21,7 +21,7 @@ export interface CryptoPrice {
 export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
   try {
     const ids = Object.values(COIN_IDS).join(',');
-    const url = `${COINCAP_API}?ids=${ids}`;
+    const url = `${COINGECKO_API}?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
 
     const response = await fetch(url, {
       headers: {
@@ -30,25 +30,19 @@ export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
     });
 
     if (!response.ok) {
-      console.warn(`CoinCap API error: ${response.status}`);
+      console.warn(`CoinGecko API error: ${response.status}`);
       return [];
     }
 
-    const json = await response.json() as { data: Array<{ id: string; priceUsd: string; changePercent24Hr: string }> };
+    const data = await response.json() as Record<string, { usd: number; usd_24h_change?: number }>;
     const results: CryptoPrice[] = [];
 
-    const idToSymbol: Record<string, string> = {};
     for (const [symbol, id] of Object.entries(COIN_IDS)) {
-      idToSymbol[id] = symbol;
-    }
-
-    for (const coin of json.data) {
-      const symbol = idToSymbol[coin.id];
-      if (symbol) {
+      if (data[id]?.usd !== undefined) {
         results.push({
           symbol,
-          price: parseFloat(coin.priceUsd),
-          change24h: parseFloat(coin.changePercent24Hr),
+          price: data[id].usd,
+          change24h: data[id].usd_24h_change ?? 0,
         });
       }
     }
