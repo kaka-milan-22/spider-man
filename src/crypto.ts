@@ -74,8 +74,12 @@ export function formatCryptoPrices(prices: CryptoPrice[]): string {
     const changeStr =
       p.change24h >= 0 ? `🟢 +${p.change24h.toFixed(2)}%` : `🔴 ${p.change24h.toFixed(2)}%`;
 
-    return `${p.symbol} : $${priceStr} ${changeStr}`;
+    return `${p.symbol.padEnd(5)} $${priceStr.padStart(11)} ${changeStr}`;
   });
 
-  return `📊 *加密货币行情*\n\n${lines.join('\n')}`;
+  return `*📊 加密货币行情*
+
+\`\`\`
+${lines.join('\n')}
+\`\`\``;
 }
