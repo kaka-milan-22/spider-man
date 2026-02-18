@@ -1,15 +1,14 @@
-const BINANCE_API = 'https://api.binance.com/api/v3/ticker/24hr';
+const COINBASE_API = 'https://api.exchange.coinbase.com/products';
 
 const SYMBOLS = [
-  { symbol: 'BTC', pair: 'BTCUSDT' },
-  { symbol: 'ETH', pair: 'ETHUSDT' },
-  { symbol: 'BNB', pair: 'BNBUSDT' },
-  { symbol: 'SOL', pair: 'SOLUSDT' },
-  { symbol: 'TON', pair: 'TONUSDT' },
-  { symbol: 'TRX', pair: 'TRXUSDT' },
-  { symbol: 'DOT', pair: 'DOTUSDT' },
-  { symbol: 'LINK', pair: 'LINKUSDT' },
-  { symbol: 'AVAX', pair: 'AVAXUSDT' },
+  { symbol: 'BTC', pair: 'BTC-USD' },
+  { symbol: 'ETH', pair: 'ETH-USD' },
+  { symbol: 'BNB', pair: 'BNB-USD' },
+  { symbol: 'SOL', pair: 'SOL-USD' },
+  { symbol: 'TON', pair: 'TON-USD' },
+  { symbol: 'DOT', pair: 'DOT-USD' },
+  { symbol: 'LINK', pair: 'LINK-USD' },
+  { symbol: 'AVAX', pair: 'AVAX-USD' },
 ];
 
 export interface CryptoPrice {
@@ -18,28 +17,30 @@ export interface CryptoPrice {
   change24h: number;
 }
 
-interface BinanceTicker {
-  symbol: string;
-  lastPrice: string;
-  priceChangePercent: string;
+interface CoinbaseStats {
+  open: string;
+  last: string;
 }
 
-async function fetchTicker(pair: string): Promise<CryptoPrice | null> {
+async function fetchStats(pair: string): Promise<CryptoPrice | null> {
   try {
-    const response = await fetch(`${BINANCE_API}?symbol=${pair}`, {
+    const response = await fetch(`${COINBASE_API}/${pair}/stats`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)',
       },
     });
     if (!response.ok) {
-      console.warn(`Binance API error for ${pair}: ${response.status}`);
+      console.warn(`Coinbase API error for ${pair}: ${response.status}`);
       return null;
     }
-    const data = (await response.json()) as BinanceTicker;
+    const data = (await response.json()) as CoinbaseStats;
+    const open = parseFloat(data.open);
+    const last = parseFloat(data.last);
+    const change24h = open > 0 ? ((last - open) / open) * 100 : 0;
     return {
-      symbol: pair.replace('USDT', ''),
-      price: parseFloat(data.lastPrice),
-      change24h: parseFloat(data.priceChangePercent),
+      symbol: pair.split('-')[0],
+      price: last,
+      change24h,
     };
   } catch (error) {
     console.warn(`Error fetching ${pair}:`, error);
@@ -49,7 +50,7 @@ async function fetchTicker(pair: string): Promise<CryptoPrice | null> {
 
 export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
   const promises = SYMBOLS.map(async ({ symbol, pair }) => {
-    const result = await fetchTicker(pair);
+    const result = await fetchStats(pair);
     return result ? { ...result, symbol } : null;
   });
 
