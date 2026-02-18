@@ -10,10 +10,12 @@ import {
   getCommandRange,
   isFlushCacheCommand,
   isCryptoCommand,
+  isExRateCommand,
   sendMessage,
 } from './telegram';
 import { getArsTopStories } from './ars-api';
 import { formatArsArticles } from './formatters';
+import { fetchExchangeRates, formatExchangeRates } from './exrate-api';
 
 const ONE_DAY_IN_SECONDS = 60 * 60 * 24;
 const SEVEN_DAYS_IN_SECONDS = ONE_DAY_IN_SECONDS * 7;
@@ -225,6 +227,17 @@ async function handleCommand(
     const message = formatCryptoPrices(prices);
     await sendMessage(config.telegramBotToken, String(chatId), message);
     console.log(`Sent ${prices.length} crypto prices`);
+    return;
+  }
+
+  // /exrate command handling
+  if (isExRateCommand(command)) {
+    // Per requirements, log and fetch/format exchange rates, then send
+    console.log(`Processing /exrate command for chat ${chatId}`);
+    const rates = await fetchExchangeRates(config.currencyApiKey);
+    const message = formatExchangeRates(rates);
+    await sendMessage(config.telegramBotToken, String(chatId), message);
+    console.log(`Sent exchange rates`);
     return;
   }
 

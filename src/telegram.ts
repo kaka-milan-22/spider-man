@@ -53,6 +53,11 @@ export function isCryptoCommand(command: string): boolean {
   return command === '/btc';
 }
 
+// Detect /exrate command
+export function isExRateCommand(command: string): boolean {
+  return command === '/exrate';
+}
+
 export async function sendMessage(
   botToken: string,
   chatId: string,

@@ -96,6 +96,7 @@ npm run trigger
 | `/top10ars` | Get top 10 Ars Technica articles (with excerpts and dates) |
 | `/btc` | Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX) |
 | `/flushcache` | Clear all cached data |
+| `/exrate` | Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND) |
 
 Command results are cached:
 - Hacker News: 2 hours
