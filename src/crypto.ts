@@ -63,24 +63,23 @@ export function formatCryptoPrices(prices: CryptoPrice[]): string {
     return '❌ 获取价格失败，请稍后重试';
   }
 
-  const maxSymbolLen = Math.max(...prices.map(p => p.symbol.length));
-
   const lines = prices.map((p) => {
-    const symbol = p.symbol.padEnd(maxSymbolLen);
     const priceStr =
       p.price >= 1000
         ? p.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : p.price >= 1
           ? p.price.toFixed(2)
           : p.price.toFixed(4);
-    const price = `$${priceStr}`.padStart(12);
 
-    const changeStr = p.change24h >= 0
-      ? `🟢 +${p.change24h.toFixed(2)}%`
-      : `🔴 ${p.change24h.toFixed(2)}%`;
+    const changeStr =
+      p.change24h >= 0 ? `🟢 +${p.change24h.toFixed(2)}%` : `🔴 ${p.change24h.toFixed(2)}%`;
 
-    return `${symbol}: ${price} ${changeStr}`;
+    return `${p.symbol.padEnd(5)} $${priceStr.padStart(11)} ${changeStr}`;
   });
 
-  return `📊 *加密货币行情*\n\n${lines.join('\n')}`;
+  return `📊 *加密货币行情*
+
+\`\`\`
+${lines.join('\n')}
+\`\`\``;
 }
