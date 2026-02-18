@@ -36,12 +36,10 @@ export function parseCommand(update: TelegramUpdate): {
 
 export function getCommandRange(command: string): { start: number; end: number } | null {
   switch (command) {
-    case '/top10':
+    case '/top10hn':
       return { start: 1, end: 10 };
-    case '/top20':
-      return { start: 11, end: 20 };
-    case '/top30':
-      return { start: 21, end: 30 };
+    case '/top10ars':
+      return { start: 1, end: 10 };
     default:
       return null;
   }
