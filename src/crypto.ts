@@ -56,7 +56,7 @@ export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
 
 export function formatCryptoPrices(prices: CryptoPrice[]): string {
   if (prices.length === 0) {
-    return '*📊 加密货币行情*\n\n❌ 获取价格失败，请稍后重试';
+    return '❌ 获取价格失败，请稍后重试';
   }
 
   const maxSymbolLen = Math.max(...prices.map(p => p.symbol.length));
@@ -78,5 +78,5 @@ export function formatCryptoPrices(prices: CryptoPrice[]): string {
     return `${symbol}: ${price} ${changeStr}`;
   });
 
-  return `*📊 加密货币行情*\n\n${lines.join('\n')}`;
+  return `📊 *加密货币行情*\n\n${lines.join('\n')}`;
 }
