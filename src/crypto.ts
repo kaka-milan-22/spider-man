@@ -15,12 +15,13 @@ const COIN_IDS: Record<string, string> = {
 export interface CryptoPrice {
   symbol: string;
   price: number;
+  change24h: number;
 }
 
 export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
   try {
     const ids = Object.values(COIN_IDS).join(',');
-    const url = `${COINGECKO_API}?ids=${ids}&vs_currencies=usd`;
+    const url = `${COINGECKO_API}?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
 
     const response = await fetch(url, {
       headers: {
@@ -33,12 +34,16 @@ export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
       return [];
     }
 
-    const data = await response.json() as Record<string, { usd: number }>;
+    const data = await response.json() as Record<string, { usd: number; usd_24h_change?: number }>;
     const results: CryptoPrice[] = [];
 
     for (const [symbol, id] of Object.entries(COIN_IDS)) {
       if (data[id]?.usd !== undefined) {
-        results.push({ symbol, price: data[id].usd });
+        results.push({
+          symbol,
+          price: data[id].usd,
+          change24h: data[id].usd_24h_change ?? 0,
+        });
       }
     }
 
@@ -59,9 +64,14 @@ export function formatCryptoPrices(prices: CryptoPrice[]): string {
       p.price >= 1000
         ? p.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : p.price >= 1
-          ? p.price.toFixed(4)
-          : p.price.toFixed(6);
-    return `${p.symbol}: $${formatted}`;
+          ? p.price.toFixed(2)
+          : p.price.toFixed(4);
+
+    const changeStr = p.change24h >= 0
+      ? `🟢 +${p.change24h.toFixed(2)}%`
+      : `🔴 ${p.change24h.toFixed(2)}%`;
+
+    return `${p.symbol}: $${formatted} ${changeStr}`;
   });
 
   return `📊 *加密货币行情*\n\n${lines.join('\n')}`;
