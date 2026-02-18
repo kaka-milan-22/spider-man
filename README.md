@@ -5,12 +5,13 @@ A Cloudflare Worker that automatically fetches daily Top 10 Hacker News stories 
 ## Features
 
 - Fetches daily Top 10 Hacker News stories by score
+- Bot commands: `/top10`, `/top20`, `/top30` for on-demand stories
+- 2-hour cache for command results
+- Stories sorted by points (descending)
 - Extracts 10 keywords from each article (local extraction, no AI API)
 - Sends formatted messages to Telegram with emojis and Markdown
 - Deduplication using Cloudflare KV (7-day TTL)
-- Cron trigger runs daily at 9:00 AM UTC
-- One-click deployment scripts
-- GitHub Actions CI/CD for auto-deployment
+- Cron trigger runs daily at 10:30 AM Beijing Time
 
 ## Quick Start
 
@@ -106,13 +107,35 @@ npx wrangler secret put TELEGRAM_CHAT_ID
 npm run deploy
 ```
 
-### Step 7: Test
+### Step 7: Set Webhook
+
+After deployment, set the webhook for your bot:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://your-worker.workers.dev/webhook"}'
+```
+
+### Step 8: Test
 
 ```bash
 npm run trigger
 ```
 
 You should receive a message in your Telegram group with the top Hacker News stories!
+
+## Bot Commands
+
+Send these commands in your Telegram group:
+
+| Command | Description |
+|---------|-------------|
+| `/top10` | Get top 1-10 HN stories (sorted by points) |
+| `/top20` | Get top 11-20 HN stories (sorted by points) |
+| `/top30` | Get top 21-30 HN stories (sorted by points) |
+
+Command results are cached for 2 hours.
 
 ## Available Commands
 
@@ -127,6 +150,13 @@ npm run setup       # First-time setup
 npm run kv:create   # Create KV namespace
 npm run secrets     # Show secrets setup instructions
 npm run typecheck   # Run TypeScript check
+```
+
+### Shell Scripts
+
+```bash
+./sync.sh           # TypeScript check + deploy to Cloudflare
+./deploy.sh         # Full deployment script with checks
 ```
 
 ### Make Commands
@@ -154,14 +184,13 @@ hn-telegram-bot/
 │   ├── formatters.ts     # Message formatting
 │   ├── config.ts         # Environment config
 │   └── types.ts          # TypeScript types
-├── .github/workflows/
-│   └── deploy.yml        # GitHub Actions CI/CD
 ├── wrangler.toml         # Cloudflare configuration
 ├── wrangler.toml.example # Config template
 ├── package.json          # Dependencies & scripts
 ├── tsconfig.json         # TypeScript config
 ├── Makefile              # Quick commands
 ├── deploy.sh             # Deployment script
+├── sync.sh               # Quick sync script
 ├── .dev.vars.example     # Local env template
 └── README.md             # This file
 ```
@@ -178,18 +207,18 @@ hn-telegram-bot/
 
 ### Cron Schedule
 
-Default: Daily at 9:00 AM UTC
+Default: Daily at 10:30 AM Beijing Time (02:30 UTC)
 
 Edit `wrangler.toml` to change:
 ```toml
-[[triggers]]
-crons = ["0 9 * * *"]  # UTC time
+[triggers]
+crons = ["30 2 * * *"]  # UTC time
 ```
 
 Cron format: `min hour day month weekday`
 
 Examples:
-- `0 9 * * *` - Daily at 9:00 AM UTC
+- `30 2 * * *` - Daily at 10:30 AM Beijing Time
 - `0 */6 * * *` - Every 6 hours
 - `0 9 * * 1` - Every Monday at 9:00 AM UTC
 
@@ -208,17 +237,6 @@ Or set as secret:
 npx wrangler secret put HN_TOP_N
 ```
 
-## GitHub Actions Auto-Deployment
-
-To enable automatic deployment on every push to main:
-
-1. Go to your GitHub repository → Settings → Secrets and variables → Actions
-2. Add these secrets:
-   - `CLOUDFLARE_API_TOKEN` - Create at [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens) with `Cloudflare Workers:Edit` permission
-   - `CLOUDFLARE_ACCOUNT_ID` - Found on your Cloudflare dashboard sidebar
-
-3. Push to main branch - it will auto-deploy!
-
 ## Troubleshooting
 
 ### "TELEGRAM_BOT_TOKEN is required" error
@@ -235,6 +253,12 @@ npx wrangler secret put TELEGRAM_CHAT_ID
 2. Verify bot token is correct
 3. Make sure bot is added to the group (for group chats)
 4. Check chat ID is correct (negative for groups)
+
+### Bot commands not working
+
+1. Make sure webhook is set correctly
+2. Check webhook status: `https://api.telegram.org/bot<TOKEN>/getWebhookInfo`
+3. Verify the worker URL is correct
 
 ### "KV namespace not found" error
 
@@ -284,12 +308,19 @@ npm run logs
 
 ## How It Works
 
-1. **Cron Trigger**: Runs daily at scheduled time
+1. **Cron Trigger**: Runs daily at scheduled time (10:30 AM Beijing)
 2. **Fetch Stories**: Gets top stories from HN Firebase API
 3. **Deduplication**: Checks KV to skip already-sent stories
 4. **Keyword Extraction**: Fetches article content and extracts top 10 keywords using word frequency
 5. **Formatting**: Formats message with emojis and Markdown
 6. **Telegram**: Sends formatted message to your group
+
+For bot commands:
+1. **Webhook**: Receives command from Telegram
+2. **Cache Check**: Returns cached result if available (2-hour TTL)
+3. **Fetch & Process**: Gets stories and extracts keywords
+4. **Sort**: Orders stories by points (descending)
+5. **Send**: Delivers formatted message to chat
 
 ## License
 
