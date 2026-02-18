@@ -1,15 +1,15 @@
-const COINGECKO_API = 'https://api.coingecko.com/api/v3/simple/price';
+const COINCAP_API = 'https://api.coincap.io/v2/assets';
 
 const COIN_IDS: Record<string, string> = {
   BTC: 'bitcoin',
   ETH: 'ethereum',
-  BNB: 'binancecoin',
+  BNB: 'binance-coin',
   SOL: 'solana',
-  TON: 'the-open-network',
+  TON: 'toncoin',
   TRX: 'tron',
   DOT: 'polkadot',
   LINK: 'chainlink',
-  AVAX: 'avalanche-2',
+  AVAX: 'avalanche',
 };
 
 export interface CryptoPrice {
@@ -21,7 +21,7 @@ export interface CryptoPrice {
 export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
   try {
     const ids = Object.values(COIN_IDS).join(',');
-    const url = `${COINGECKO_API}?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
+    const url = `${COINCAP_API}?ids=${ids}`;
 
     const response = await fetch(url, {
       headers: {
@@ -30,19 +30,25 @@ export async function fetchCryptoPrices(): Promise<CryptoPrice[]> {
     });
 
     if (!response.ok) {
-      console.warn(`CoinGecko API error: ${response.status}`);
+      console.warn(`CoinCap API error: ${response.status}`);
       return [];
     }
 
-    const data = await response.json() as Record<string, { usd: number; usd_24h_change?: number }>;
+    const json = await response.json() as { data: Array<{ id: string; priceUsd: string; changePercent24Hr: string }> };
     const results: CryptoPrice[] = [];
 
+    const idToSymbol: Record<string, string> = {};
     for (const [symbol, id] of Object.entries(COIN_IDS)) {
-      if (data[id]?.usd !== undefined) {
+      idToSymbol[id] = symbol;
+    }
+
+    for (const coin of json.data) {
+      const symbol = idToSymbol[coin.id];
+      if (symbol) {
         results.push({
           symbol,
-          price: data[id].usd,
-          change24h: data[id].usd_24h_change ?? 0,
+          price: parseFloat(coin.priceUsd),
+          change24h: parseFloat(coin.changePercent24Hr),
         });
       }
     }
@@ -59,20 +65,24 @@ export function formatCryptoPrices(prices: CryptoPrice[]): string {
     return '📊 *加密货币行情*\n\n❌ 获取价格失败，请稍后重试';
   }
 
+  const maxSymbolLen = Math.max(...prices.map(p => p.symbol.length));
+
   const lines = prices.map((p) => {
-    const formatted =
+    const symbol = p.symbol.padEnd(maxSymbolLen);
+    const priceStr =
       p.price >= 1000
         ? p.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : p.price >= 1
           ? p.price.toFixed(2)
           : p.price.toFixed(4);
+    const price = `$${priceStr}`.padStart(12);
 
     const changeStr = p.change24h >= 0
       ? `🟢 +${p.change24h.toFixed(2)}%`
       : `🔴 ${p.change24h.toFixed(2)}%`;
 
-    return `${p.symbol}: $${formatted} ${changeStr}`;
+    return `${symbol}: ${price} ${changeStr}`;
   });
 
-  return `📊 *加密货币行情*\n\n${lines.join('\n')}`;
+  return `📊 *加密货币行情*\n\n\`\`\`\n${lines.join('\n')}\n\`\`\``;
 }
