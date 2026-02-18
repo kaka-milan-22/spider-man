@@ -1,6 +1,6 @@
-# HN Telegram Bot
+# HN & Ars Technica Telegram Bot
 
-HN Telegram Bot 是一个 Cloudflare Worker，每天自动获取 Top 10 Hacker News 文章并发送到你的 Telegram 群组，同时提取关键词。
+一个 Cloudflare Worker，每天自动获取 Top 10 Hacker News 文章和 Ars Technica 文章并发送到你的 Telegram 群组，同时提取关键词和文章摘要。
 
 ## 语言
 
@@ -9,14 +9,14 @@ HN Telegram Bot 是一个 Cloudflare Worker，每天自动获取 Top 10 Hacker N
 
 ## 功能特性
 
-- 每天自动获取 Top 10 Hacker News 文章（按分数排序）
-- Bot 命令：`/top10`、`/top20`、`/top30` 按需获取文章
-- 命令结果缓存 2 小时
-- 文章按 points 倒序排列
-- 本地提取每篇文章的 10 个关键词（无需 AI API）
-- 使用表情符号和 Markdown 格式发送消息
-- 使用 Cloudflare KV 去重（7 天过期）
-- 每天北京时间 10:30 自动推送
+- **Hacker News**：获取 Top 10 文章（按分数排序）
+- **Ars Technica**：获取 Top 10 文章（含摘要和发布时间）
+- **Bot 命令**：通过 Telegram 命令按需获取文章
+- **智能缓存**：命令结果缓存 2 小时，Ars RSS 缓存 1 小时
+- **关键词提取**：本地提取每篇 HN 文章的 10 个关键词（无需 AI API）
+- **消息格式化**：使用表情符号和 Markdown 格式发送消息
+- **去重机制**：使用 Cloudflare KV 去重（7 天过期）
+- **定时推送**：每天北京时间 10:30 自动推送
 
 ## 环境要求
 
@@ -92,11 +92,14 @@ npm run trigger
 
 | 命令 | 描述 |
 |---------|-------------|
-| `/top10` | 获取 Top 1-10 文章（按 points 排序） |
-| `/top20` | 获取 Top 11-20 文章（按 points 排序） |
-| `/top30` | 获取 Top 21-30 文章（按 points 排序） |
+| `/top10hn` | 获取 Top 10 Hacker News 文章（按 points 排序） |
+| `/top10ars` | 获取 Top 10 Ars Technica 文章（含摘要和时间） |
+| `/btc` | 获取加密货币价格（BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX） |
+| `/flushcache` | 清除所有缓存数据 |
 
-命令结果缓存 2 小时。
+命令结果缓存时间：
+- Hacker News：2 小时
+- Ars Technica：1 小时
 
 ## 常用命令
 
@@ -136,15 +139,26 @@ hn-telegram-bot/
 ├── src/
 │   ├── index.ts          # 主 Worker 处理器
 │   ├── hn-api.ts         # Hacker News API 客户端
+│   ├── ars-api.ts        # Ars Technica RSS 客户端
 │   ├── keywords.ts       # 关键词提取
 │   ├── telegram.ts       # Telegram Bot API 客户端
 │   ├── formatters.ts     # 消息格式化
+│   ├── crypto.ts         # 加密货币价格获取
 │   ├── config.ts         # 环境配置
 │   └── types.ts          # TypeScript 类型
 ├── wrangler.toml         # Cloudflare 配置
+├── commands.txt          # Bot 命令参考
 ├── sync.sh               # 快速部署脚本
 └── deploy.sh             # 完整部署脚本
 ```
+
+## 数据来源
+
+| 来源 | 类型 | URL |
+|------|------|-----|
+| Hacker News | JSON API | `https://hacker-news.firebaseio.com/v0/` |
+| Ars Technica | RSS Feed | `https://arstechnica.com/feed/` |
+| 加密货币价格 | API | CoinGecko |
 
 ## 工作原理
 
@@ -159,9 +173,23 @@ hn-telegram-bot/
 ### Bot 命令
 
 1. Webhook 接收来自 Telegram 的命令
-2. 检查缓存（2 小时过期）
-3. 如果缓存未命中：获取、处理、按 points 排序
+2. 检查缓存（1-2 小时过期，根据来源）
+3. 如果缓存未命中：获取、处理、格式化
 4. 发送格式化消息
+
+### Ars Technica 输出格式
+
+```
+📰 *Ars Technica Top 10*
+
+1. [文章标题](URL)
+   📝 文章摘要...
+   📅 2月18日 14:30
+
+2. [文章标题](URL)
+   📝 文章摘要...
+   📅 2月18日 13:15
+```
 
 ## 常见问题
 

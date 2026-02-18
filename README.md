@@ -1,6 +1,6 @@
-# HN Telegram Bot
+# HN & Ars Technica Telegram Bot
 
-HN Telegram Bot is a Cloudflare Worker that automatically fetches daily Top 10 Hacker News stories and sends them to your Telegram group with keyword extraction.
+A Cloudflare Worker that automatically fetches daily Top 10 Hacker News stories and Ars Technica articles, sending them to your Telegram group with keyword extraction and article summaries.
 
 ## Languages
 
@@ -9,14 +9,14 @@ Default: English 🇺🇸
 
 ## Features
 
-- Fetches daily Top 10 Hacker News stories by score
-- Bot commands: `/top10`, `/top20`, `/top30` for on-demand stories
-- 2-hour cache for command results
-- Stories sorted by points (descending)
-- Extracts 10 keywords from each article (local extraction, no AI API)
-- Sends formatted messages to Telegram with emojis and Markdown
-- Deduplication using Cloudflare KV (7-day TTL)
-- Cron trigger runs daily at 10:30 AM Beijing Time
+- **Hacker News**: Fetches Top 10 stories sorted by points
+- **Ars Technica**: Fetches Top 10 articles from RSS feed with excerpts
+- **Bot Commands**: On-demand stories via Telegram commands
+- **Smart Caching**: 2-hour cache for command results, 1-hour for Ars RSS
+- **Keyword Extraction**: Extracts 10 keywords from each HN article (local, no AI API)
+- **Message Formatting**: Formatted messages with emojis and Markdown
+- **Deduplication**: Uses Cloudflare KV (7-day TTL) for HN stories
+- **Cron Trigger**: Runs daily at 10:30 AM Beijing Time
 
 ## Requirements
 
@@ -92,11 +92,14 @@ npm run trigger
 
 | Command | Description |
 |---------|-------------|
-| `/top10` | Get top 1-10 HN stories (sorted by points) |
-| `/top20` | Get top 11-20 HN stories (sorted by points) |
-| `/top30` | Get top 21-30 HN stories (sorted by points) |
+| `/top10hn` | Get top 10 Hacker News stories (sorted by points) |
+| `/top10ars` | Get top 10 Ars Technica articles (with excerpts and dates) |
+| `/btc` | Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX) |
+| `/flushcache` | Clear all cached data |
 
-Command results are cached for 2 hours.
+Command results are cached:
+- Hacker News: 2 hours
+- Ars Technica: 1 hour
 
 ## CLI Commands
 
@@ -136,15 +139,26 @@ hn-telegram-bot/
 ├── src/
 │   ├── index.ts          # Main Worker handler
 │   ├── hn-api.ts         # Hacker News API client
+│   ├── ars-api.ts        # Ars Technica RSS client
 │   ├── keywords.ts       # Keyword extraction
 │   ├── telegram.ts       # Telegram Bot API client
 │   ├── formatters.ts     # Message formatting
+│   ├── crypto.ts         # Crypto price fetching
 │   ├── config.ts         # Environment config
 │   └── types.ts          # TypeScript types
 ├── wrangler.toml         # Cloudflare config
+├── commands.txt          # Bot commands reference
 ├── sync.sh               # Quick deploy script
 └── deploy.sh             # Full deployment script
 ```
+
+## Data Sources
+
+| Source | Type | URL |
+|--------|------|-----|
+| Hacker News | JSON API | `https://hacker-news.firebaseio.com/v0/` |
+| Ars Technica | RSS Feed | `https://arstechnica.com/feed/` |
+| Crypto Prices | API | CoinGecko |
 
 ## How It Works
 
@@ -159,9 +173,23 @@ hn-telegram-bot/
 ### Bot Commands
 
 1. Webhook receives command from Telegram
-2. Check cache (2-hour TTL)
-3. If cache miss: fetch, process, sort by points
+2. Check cache (1-2 hour TTL depending on source)
+3. If cache miss: fetch, process, format
 4. Send formatted message
+
+### Ars Technica Output Format
+
+```
+📰 *Ars Technica Top 10*
+
+1. [Article Title](URL)
+   📝 Article excerpt...
+   📅 Feb 18, 14:30
+
+2. [Article Title](URL)
+   📝 Article excerpt...
+   📅 Feb 18, 13:15
+```
 
 ## Troubleshooting
 
