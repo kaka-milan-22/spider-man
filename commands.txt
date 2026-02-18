@@ -1,5 +1,4 @@
-top10 - Get top 1-10 HN stories
-top20 - Get top 11-20 HN stories
-top30 - Get top 21-30 HN stories
+top10hn - Get top 1-10 Hacker News stories
+top10ars - Get top 10 Ars Technica articles
 flushcache - Clear all cache entries
 btc - Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX)
