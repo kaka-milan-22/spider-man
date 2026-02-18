@@ -108,6 +108,8 @@ export interface Env {
   // Secrets
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_CHAT_ID: string;
+  // Currency API
+  CURRENCY_API_KEY: string;
 
   // Config
   HN_TOP_N?: string;
@@ -120,6 +122,7 @@ export interface Env {
 export interface Config {
   telegramBotToken: string;
   telegramChatId: string;
+  currencyApiKey: string;
   hnTopN: number;
 }
 

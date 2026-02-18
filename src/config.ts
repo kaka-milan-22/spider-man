@@ -3,6 +3,7 @@ import { Config, Env } from './types';
 export function getConfig(env: Env): Config {
   const telegramBotToken = env.TELEGRAM_BOT_TOKEN;
   const telegramChatId = env.TELEGRAM_CHAT_ID;
+  const currencyApiKey = env.CURRENCY_API_KEY;
 
   if (!telegramBotToken || telegramBotToken.trim() === '') {
     throw new Error(
@@ -16,11 +17,18 @@ export function getConfig(env: Env): Config {
     );
   }
 
+  if (!currencyApiKey || currencyApiKey.trim() === '') {
+    throw new Error(
+      'CURRENCY_API_KEY is required. Please set it via: wrangler secret put CURRENCY_API_KEY'
+    );
+  }
+
   const hnTopN = env.HN_TOP_N ? parseInt(env.HN_TOP_N, 10) : 10;
 
   return {
     telegramBotToken,
     telegramChatId,
+    currencyApiKey,
     hnTopN: isNaN(hnTopN) ? 10 : hnTopN,
   };
 }
