@@ -9,6 +9,8 @@ const SYMBOLS = [
   { symbol: 'DOT', pair: 'DOT-USD' },
   { symbol: 'LINK', pair: 'LINK-USD' },
   { symbol: 'AVAX', pair: 'AVAX-USD' },
+  { symbol: 'UNI', pair: 'UNI-USD' },
+  { symbol: 'AAVE', pair: 'AAVE-USD' },
 ];
 
 export interface CryptoPrice {
