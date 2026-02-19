@@ -114,7 +114,7 @@ export function formatExchangeRates(rates: ExchangeRates): string {
     `🇻🇳 VND: ${formatValue(rates.VND)}`,
   ];
 
-  let result = '💱 *Exchange Rates* (1 USD)\n\n' + lines.join('\n');
+  let result = '🇺🇸 *Exchange Rates* (1 USD)\n\n' + lines.join('\n');
 
   if (rates.updatedAt) {
     result += `\n\nUpdated: ${rates.updatedAt}`;

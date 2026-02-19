@@ -68,7 +68,7 @@ export async function sendMessage(
   const payload: TelegramMessagePayload = {
     chat_id: chatId,
     text: text,
-    parse_mode: 'Markdown',
+    parse_mode: text.includes('<') ? 'HTML' : 'Markdown',
     disable_web_page_preview: false,
   };
 
