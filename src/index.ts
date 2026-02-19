@@ -1,7 +1,7 @@
 import { Env, ProcessedStory, HNStory, TelegramUpdate } from './types';
 import { getConfig } from './config';
 import { getTopStories, getStoriesByRange } from './hn-api';
-import { extractKeywordsFromUrl } from './keywords';
+import { extractKeywordsFromUrl, extractKeywords } from './keywords';
 import { fetchCryptoPrices, formatCryptoPrices } from './crypto';
 import {
   sendDigest,
@@ -136,7 +136,7 @@ async function processStoryWithoutDedup(story: HNStory): Promise<ProcessedStory 
 
   console.log(`Processing story ${story.id}: ${story.title}`);
 
-  const keywords = await extractKeywordsFromUrl(story.url, story.title, 10);
+  const keywords = extractKeywords(story.title, 10);
 
   return {
     id: story.id,
