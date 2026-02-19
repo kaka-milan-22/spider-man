@@ -13,7 +13,7 @@ Default: English 🇺🇸
 - **Ars Technica**: Fetches Top 10 articles from RSS feed with excerpts
 - **Bot Commands**: On-demand stories via Telegram commands
 - **Smart Caching**: 2-hour cache for command results, 1-hour for Ars RSS
-- **Keyword Extraction**: Extracts 10 keywords from each HN article (local, no AI API)
+- **Keyword Extraction**: Extracts 10 keywords from each HN article with stemming (local, no AI API)
 - **Message Formatting**: Formatted messages with emojis and Markdown
 - **Deduplication**: Uses Cloudflare KV (7-day TTL) for HN stories
 - **Cron Trigger**: Runs daily at 10:30 AM Beijing Time

@@ -91,10 +91,36 @@ function extractTag(content: string, tagName: string): string | null {
 }
 
 function cleanText(text: string): string {
- 
-  return text
+  let cleaned = text
     .replace(/<!\[CDATA\[/g, '')
     .replace(/\]\]>/g, '')
     .replace(/<[^>]+>/g, '')
     .trim();
+
+  const entities: Record<string, string> = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&#039;': "'",
+    '&apos;': "'",
+    '&#x27;': "'",
+    '&#x2F;': '/',
+    '&#47;': '/',
+  };
+
+  for (const [entity, char] of Object.entries(entities)) {
+    cleaned = cleaned.replace(new RegExp(entity, 'g'), char);
+  }
+
+  cleaned = cleaned.replace(/&#(\d+);/g, (_, code) => {
+    return String.fromCharCode(parseInt(code, 10));
+  });
+
+  cleaned = cleaned.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+
+  return cleaned;
 }

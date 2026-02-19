@@ -180,7 +180,35 @@ function tokenize(text: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter((word) => word.length >= 3);
+    .filter((word) => word.length >= 3)
+    .map((word) => stemWord(word));
+}
+
+function stemWord(word: string): string {
+  const sEndings = ['sses', 'xes', 'ches', 'shes', 'oes', 'zes'];
+  for (const ending of sEndings) {
+    if (word.endsWith(ending)) {
+      return word.slice(0, -2);
+    }
+  }
+
+  if (word.endsWith('ies') && word.length > 4) {
+    return word.slice(0, -3) + 'y';
+  }
+
+  if (word.endsWith('ied') && word.length > 4) {
+    return word.slice(0, -3) + 'y';
+  }
+
+  if (word.endsWith('ying') && word.length > 5) {
+    return word.slice(0, -4) + 'ie';
+  }
+
+  if (word.endsWith('s') && !word.endsWith('ss') && !word.endsWith('us') && !word.endsWith('is')) {
+    return word.slice(0, -1);
+  }
+
+  return word;
 }
 
 function filterStopWords(words: string[]): string[] {
