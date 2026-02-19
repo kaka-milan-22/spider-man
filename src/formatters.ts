@@ -6,9 +6,9 @@ export function formatStoryMessage(
 ): string {
   const keywordsText = story.keywords.slice(0, 10).join(', ');
 
-  return `${index}. [${escapeMarkdown(story.title)}](${story.url})
+  return `${index}. <a href="${story.url}">${escapeHtml(story.title)}</a>
 🏆 ${story.score} points | 💬 ${story.commentCount} comments
-🏷️ ${escapeMarkdown(keywordsText)}`;
+🏷️ ${escapeHtml(keywordsText)}`;
 }
 
 export function formatDailyDigest(
@@ -16,10 +16,11 @@ export function formatDailyDigest(
   date: Date
 ): string {
   if (stories.length === 0) {
-    return '📰 *Hacker News Daily Digest*\n\nNo new top stories today.';
+    return '📰 <b>Hacker News Daily Digest</b>\n\nNo new top stories today.';
   }
 
-  const sortedStories = [...stories].sort((a, b) => b.score - a.score);
+  // Keep HN's original ranking order (no re-sorting by score)
+  const sortedStories = stories;
 
   const dateStr = date.toLocaleDateString('en-US', {
     weekday: 'long',
@@ -28,7 +29,7 @@ export function formatDailyDigest(
     day: 'numeric',
   });
 
-  const header = `📰 *Hacker News Daily Digest*\n📅 ${escapeMarkdown(dateStr)}\n\n`;
+  const header = `📰 <b>Hacker News Daily Digest</b>\n📅 ${escapeHtml(dateStr)}\n\n`;
 
   const storiesText = sortedStories
     .map((story, index) => formatStoryMessage(story, index + 1))
@@ -44,7 +45,7 @@ export function formatDailyDigest(
     return (
       header +
       truncatedText +
-      '\n\n_(Message truncated due to length. Showing top 5 stories.)'
+      '\n\n<i>(Message truncated due to length. Showing top 5 stories.)</i>'
     );
   }
 
@@ -57,12 +58,13 @@ export function formatStoriesRange(
   end: number
 ): string {
   if (stories.length === 0) {
-    return `📰 *Hacker News Top ${start}-${end}*\n\nNo stories found.`;
+    return `📰 <b>Hacker News Top ${start}-${end}</b>\n\nNo stories found.`;
   }
 
-  const sortedStories = [...stories].sort((a, b) => b.score - a.score);
+  // Keep HN's original ranking order (no re-sorting by score)
+  const sortedStories = stories;
 
-  const header = `📰 *Hacker News Top ${start}-${end}*\n\n`;
+  const header = `📰 <b>Hacker News Top ${start}-${end}</b>\n\n`;
 
   const storiesText = sortedStories
     .map((story, index) => formatStoryMessage(story, start + index))
@@ -73,35 +75,33 @@ export function formatStoriesRange(
   if (message.length > 4000) {
     return (
       header +
-      '_Message too long. Please try a smaller range._'
+      '<i>Message too long. Please try a smaller range.</i>'
     );
   }
 
   return message;
 }
 
-function escapeMarkdown(text: string): string {
+function escapeHtml(text: string): string {
+  // Escape HTML special characters
   return text
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)')
-    .replace(/_/g, '\\_')
-    .replace(/\*/g, '\\*')
-    .replace(/`/g, '\\`');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 export function formatArsArticles(articles: ArsArticle[]): string {
   if (articles.length === 0) {
-    return '📰 *Ars Technica Top 10*\n\nNo articles found.';
+    return '📰 <b>Ars Technica Top 10</b>\n\nNo articles found.';
   }
 
-  const header = '📰 *Ars Technica Top 10*\n\n';
+  const header = '📰 <b>Ars Technica Top 10</b>\n\n';
 
   const articlesText = articles
     .map((article, index) => {
-      const title = `${index + 1}. [${escapeMarkdown(article.title)}](${article.url})`;
-      const excerpt = article.excerpt ? `\n   📝 ${escapeMarkdown(article.excerpt.substring(0, 150))}${article.excerpt.length > 150 ? '...' : ''}` : '';
+      const title = `${index + 1}. <a href="${article.url}">${escapeHtml(article.title)}</a>`;
+      const excerpt = article.excerpt ? `\n   📝 ${escapeHtml(article.excerpt.substring(0, 150))}${article.excerpt.length > 150 ? '...' : ''}` : '';
       const date = article.publishedAt ? `\n   📅 ${formatArsDate(article.publishedAt)}` : '';
       return title + excerpt + date;
     })
@@ -114,12 +114,12 @@ export function formatArsArticles(articles: ArsArticle[]): string {
     const truncated = articles.slice(0, 7);
     const truncatedText = truncated
       .map((article, index) => {
-        const title = `${index + 1}. [${escapeMarkdown(article.title)}](${article.url})`;
-        const excerpt = article.excerpt ? `\n   📝 ${escapeMarkdown(article.excerpt.substring(0, 100))}...` : '';
+        const title = `${index + 1}. <a href="${article.url}">${escapeHtml(article.title)}</a>`;
+        const excerpt = article.excerpt ? `\n   📝 ${escapeHtml(article.excerpt.substring(0, 100))}...` : '';
         return title + excerpt;
       })
       .join('\n\n');
-    return header + truncatedText + '\n\n_(Message truncated. Showing top 7 stories.)_';
+    return header + truncatedText + '\n\n<i>(Message truncated. Showing top 7 stories.)</i>';
   }
 
   return message;

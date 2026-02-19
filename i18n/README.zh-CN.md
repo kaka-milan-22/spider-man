@@ -9,12 +9,14 @@
 
 ## 功能特性
 
-- **Hacker News**：获取 Top 10 文章（按分数排序）
-- **Ars Technica**：获取 Top 10 文章（含摘要和发布时间，已解码 HTML 实体）
+- **Hacker News**：获取 Top 10 文章（使用 HN 官方排名算法，综合考虑时间、分数和评论）
+- **Ars Technica**：获取 Top 10 文章（含摘要和发布时间）
+- **加密货币价格**：获取实时加密货币价格（BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX）
+- **汇率查询**：获取美元汇率（PHP, MYR, TWD, HKD, CNY, THB, VND）
 - **Bot 命令**：通过 Telegram 命令按需获取文章
 - **智能缓存**：命令结果缓存 2 小时，Ars RSS 缓存 1 小时
 - **关键词提取**：本地提取每篇 HN 文章的 10 个关键词，支持词干提取（无需 AI API）
-- **消息格式化**：使用表情符号和 Markdown 格式发送消息
+- **HTML 格式化**：使用 HTML 格式发送消息（比 Markdown 更稳定可靠）
 - **去重机制**：使用 Cloudflare KV 去重（7 天过期）
 - **定时推送**：每天北京时间 10:30 自动推送
 
@@ -92,9 +94,10 @@ npm run trigger
 
 | 命令 | 描述 |
 |---------|-------------|
-| `/top10hn` | 获取 Top 10 Hacker News 文章（按 points 排序） |
+| `/top10hn` | 获取 Top 10 Hacker News 文章（HN 官方排名：综合考虑时间、分数、评论） |
 | `/top10ars` | 获取 Top 10 Ars Technica 文章（含摘要和时间） |
 | `/btc` | 获取加密货币价格（BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX） |
+| `/exrate` | 获取美元汇率（PHP, MYR, TWD, HKD, CNY, THB, VND） |
 | `/flushcache` | 清除所有缓存数据 |
 
 命令结果缓存时间：
@@ -142,6 +145,15 @@ hn-telegram-bot/
 │   ├── ars-api.ts        # Ars Technica RSS 客户端
 │   ├── keywords.ts       # 关键词提取
 │   ├── telegram.ts       # Telegram Bot API 客户端
+│   ├── formatters.ts     # 消息格式化（HTML）
+│   ├── crypto.ts         # 加密货币价格获取
+│   ├── exrate-api.ts     # 汇率 API
+│   ├── config.ts         # 环境配置
+│   └── types.ts          # TypeScript 类型定义
+│   ├── hn-api.ts         # Hacker News API 客户端
+│   ├── ars-api.ts        # Ars Technica RSS 客户端
+│   ├── keywords.ts       # 关键词提取
+│   ├── telegram.ts       # Telegram Bot API 客户端
 │   ├── formatters.ts     # 消息格式化
 │   ├── crypto.ts         # 加密货币价格获取
 │   ├── config.ts         # 环境配置
@@ -156,9 +168,49 @@ hn-telegram-bot/
 
 | 来源 | 类型 | URL |
 |------|------|-----|
-| Hacker News | JSON API | `https://hacker-news.firebaseio.com/v0/` |
+| Hacker News | JSON API | `https://hacker-news.firebaseio.com/v0/topstories.json` |
 | Ars Technica | RSS Feed | `https://arstechnica.com/feed/` |
 | 加密货币价格 | API | CoinGecko |
+| 汇率 | API | currencyapi.com |
+
+## 排名算法
+
+### Hacker News 排名
+
+`/top10hn` 使用 **HN 官方排名算法**（不是简单的分数排序）。
+
+排名考虑因素：
+- **Points（分数）**：点赞数
+- **Time（时间）**：新鲜度（越新越好）
+- **Comments（评论）**：互动热度
+- **Time Decay（时间衰减）**：分数随时间降低
+
+排名公式（简化版）：
+```
+排名分数 = (Points - 1) / (Age + 2)^Gravity
+```
+
+**为什么使用 HN 算法？**
+- ✅ 平衡新鲜度和热度
+- ✅ 与 HN 首页顺序一致
+- ✅ 反映当前社区关注点
+- ✅ 防止老文章长期霸榜
+
+### 排名对比示例
+
+**纯分数排序**（旧行为）：
+```
+1. 文章 A - 1500 points（3天前）
+2. 文章 B - 1200 points（2天前）
+3. 文章 C - 800 points（1小时前） ← 最新但排第3
+```
+
+**HN 算法**（当前行为）：
+```
+1. 文章 C - 800 points（1小时前）  ← 新鲜热文优先
+2. 文章 D - 600 points（3小时前）
+3. 文章 A - 1500 points（3天前）  ← 分数高但已过时
+```
 
 ## 工作原理
 
@@ -180,16 +232,26 @@ hn-telegram-bot/
 ### Ars Technica 输出格式
 
 ```
-📰 *Ars Technica Top 10*
+📰 Ars Technica Top 10
 
-1. [文章标题](URL)
+1. 文章标题（链接）
    📝 文章摘要...
    📅 2月18日 14:30
 
-2. [文章标题](URL)
+2. 文章标题（链接）
    📝 文章摘要...
    📅 2月18日 13:15
 ```
+
+### 消息格式
+
+所有消息使用 **HTML 格式化**以获得更好的稳定性：
+- 链接：`<a href="url">text</a>`
+- 粗体：`<b>text</b>`
+- 斜体：`<i>text</i>`
+- 代码：`<code>text</code>`
+
+HTML 比 Markdown 更可靠，能更好地处理标题中的特殊字符。
 
 ## 常见问题
 

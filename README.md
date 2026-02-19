@@ -9,12 +9,14 @@ Default: English 🇺🇸
 
 ## Features
 
-- **Hacker News**: Fetches Top 10 stories sorted by points
+- **Hacker News**: Fetches Top 10 stories using HN's official ranking algorithm (considers time, points, and comments)
 - **Ars Technica**: Fetches Top 10 articles from RSS feed with excerpts
+- **Crypto Prices**: Get real-time cryptocurrency prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX)
+- **Exchange Rates**: Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND)
 - **Bot Commands**: On-demand stories via Telegram commands
 - **Smart Caching**: 2-hour cache for command results, 1-hour for Ars RSS
 - **Keyword Extraction**: Extracts 10 keywords from each HN article with stemming (local, no AI API)
-- **Message Formatting**: Formatted messages with emojis and Markdown
+- **HTML Formatting**: Robust message formatting using HTML (more reliable than Markdown)
 - **Deduplication**: Uses Cloudflare KV (7-day TTL) for HN stories
 - **Cron Trigger**: Runs daily at 10:30 AM Beijing Time
 
@@ -92,11 +94,11 @@ npm run trigger
 
 | Command | Description |
 |---------|-------------|
-| `/top10hn` | Get top 10 Hacker News stories (sorted by points) |
+| `/top10hn` | Get top 10 Hacker News stories (HN official ranking: considers time, points, comments) |
 | `/top10ars` | Get top 10 Ars Technica articles (with excerpts and dates) |
 | `/btc` | Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX) |
-| `/flushcache` | Clear all cached data |
 | `/exrate` | Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND) |
+| `/flushcache` | Clear all cached data |
 
 Command results are cached:
 - Hacker News: 2 hours
@@ -143,8 +145,9 @@ hn-telegram-bot/
 │   ├── ars-api.ts        # Ars Technica RSS client
 │   ├── keywords.ts       # Keyword extraction
 │   ├── telegram.ts       # Telegram Bot API client
-│   ├── formatters.ts     # Message formatting
+│   ├── formatters.ts     # Message formatting (HTML)
 │   ├── crypto.ts         # Crypto price fetching
+│   ├── exrate-api.ts     # Exchange rate API
 │   ├── config.ts         # Environment config
 │   └── types.ts          # TypeScript types
 ├── wrangler.toml         # Cloudflare config
@@ -157,9 +160,49 @@ hn-telegram-bot/
 
 | Source | Type | URL |
 |--------|------|-----|
-| Hacker News | JSON API | `https://hacker-news.firebaseio.com/v0/` |
+| Hacker News | JSON API | `https://hacker-news.firebaseio.com/v0/topstories.json` |
 | Ars Technica | RSS Feed | `https://arstechnica.com/feed/` |
 | Crypto Prices | API | CoinGecko |
+| Exchange Rates | API | currencyapi.com |
+
+## Ranking Algorithm
+
+### Hacker News Ranking
+
+`/top10hn` uses **HN's official ranking algorithm** (not simple score sorting).
+
+The ranking considers:
+- **Points**: Upvote count
+- **Time**: Freshness (newer is better)
+- **Comments**: Engagement level
+- **Time Decay**: Score decreases over time
+
+Formula (simplified):
+```
+Ranking Score = (Points - 1) / (Age + 2)^Gravity
+```
+
+**Why HN's algorithm?**
+- ✅ Balances freshness and popularity
+- ✅ Matches HN homepage order
+- ✅ Reflects current community interest
+- ✅ Prevents old posts from dominating
+
+### Example Comparison
+
+**Pure score sorting** (old behavior):
+```
+1. Article A - 1500 points (3 days ago)
+2. Article B - 1200 points (2 days ago)
+3. Article C - 800 points (1 hour ago)  ← Latest but ranked 3rd
+```
+
+**HN's algorithm** (current behavior):
+```
+1. Article C - 800 points (1 hour ago)   ← Hot and fresh
+2. Article D - 600 points (3 hours ago)
+3. Article A - 1500 points (3 days ago)  ← High score but outdated
+```
 
 ## How It Works
 
@@ -181,16 +224,26 @@ hn-telegram-bot/
 ### Ars Technica Output Format
 
 ```
-📰 *Ars Technica Top 10*
+📰 Ars Technica Top 10
 
-1. [Article Title](URL)
+1. Article Title (linked)
    📝 Article excerpt...
    📅 Feb 18, 14:30
 
-2. [Article Title](URL)
+2. Article Title (linked)
    📝 Article excerpt...
    📅 Feb 18, 13:15
 ```
+
+### Message Format
+
+All messages use **HTML formatting** for better stability:
+- Links: `<a href="url">text</a>`
+- Bold: `<b>text</b>`
+- Italic: `<i>text</i>`
+- Code: `<code>text</code>`
+
+HTML is more reliable than Markdown for handling special characters in titles.
 
 ## Troubleshooting
 
