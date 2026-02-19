@@ -1,7 +1,7 @@
 import { Env, ProcessedStory, HNStory, TelegramUpdate } from './types';
 import { getConfig } from './config';
 import { getTopStories, getStoriesByRange } from './hn-api';
-import { extractKeywordsFromUrl, extractKeywords } from './keywords';
+import { extractKeywordsFromUrl } from './keywords';
 import { fetchCryptoPrices, formatCryptoPrices } from './crypto';
 import {
   sendDigest,
@@ -136,8 +136,6 @@ async function processStoryWithoutDedup(story: HNStory): Promise<ProcessedStory 
 
   console.log(`Processing story ${story.id}: ${story.title}`);
 
-  const keywords = extractKeywords(story.title, 10);
-
   return {
     id: story.id,
     title: story.title,
@@ -146,7 +144,7 @@ async function processStoryWithoutDedup(story: HNStory): Promise<ProcessedStory 
     author: story.by,
     time: story.time,
     commentCount: story.descendants || 0,
-    keywords: keywords,
+    keywords: [],
   };
 }
 
