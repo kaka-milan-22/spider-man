@@ -234,6 +234,17 @@ async function handleCommand(
   if (isExRateCommand(command)) {
     // Per requirements, log and fetch/format exchange rates, then send
     console.log(`Processing /exrate command for chat ${chatId}`);
+    
+    if (!config.currencyApiKey) {
+      await sendMessage(
+        config.telegramBotToken,
+        String(chatId),
+        '❌ Currency API key not configured. Please contact the bot admin.'
+      );
+      console.log('Currency API key not configured');
+      return;
+    }
+    
     const rates = await fetchExchangeRates(config.currencyApiKey);
     const message = formatExchangeRates(rates);
     await sendMessage(config.telegramBotToken, String(chatId), message);
