@@ -14,11 +14,19 @@ export async function getArsTopStories(kv: KVNamespace): Promise<ArsArticle[]> {
 
     
     console.log('Fetching Ars Technica RSS feed...');
-    const response = await fetch(ARS_RSS_URL, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; TelegramBot/1.0)',
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    let response: Response;
+    try {
+      response = await fetch(ARS_RSS_URL, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; TelegramBot/1.0)',
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       throw new ArsAPIError(`Failed to fetch RSS: ${response.status} ${response.statusText}`);
@@ -46,8 +54,8 @@ export async function getArsTopStories(kv: KVNamespace): Promise<ArsArticle[]> {
         console.log('Returning cached data after fetch error');
         return cached as ArsArticle[];
       }
-    } catch {
-    
+    } catch (cacheError) {
+      console.warn('Failed to read fallback cache:', cacheError);
     }
     
     return [];

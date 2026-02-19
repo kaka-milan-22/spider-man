@@ -84,10 +84,8 @@ async function flushCache(kv: KVNamespace): Promise<number> {
 
   do {
     const list = await kv.list({ cursor });
-    for (const key of list.keys) {
-      await kv.delete(key.name);
-      deleted++;
-    }
+    await Promise.all(list.keys.map(key => kv.delete(key.name)));
+    deleted += list.keys.length;
     cursor = list.list_complete ? undefined : list.cursor;
   } while (cursor);
 

@@ -50,20 +50,10 @@ export async function getStory(id: number): Promise<HNStory | null> {
 export async function getTopStories(limit: number): Promise<HNStory[]> {
   const storyIds = await getTopStoryIds(limit * 2);
 
-  const stories: HNStory[] = [];
-
-  for (const id of storyIds) {
-    if (stories.length >= limit) {
-      break;
-    }
-
-    const story = await getStory(id);
-    if (story && story.score > 0) {
-      stories.push(story);
-    }
-  }
-
-  return stories;
+  const results = await Promise.all(storyIds.map(id => getStory(id)));
+  return results
+    .filter((s): s is HNStory => s !== null && s.score > 0)
+    .slice(0, limit);
 }
 
 /**
@@ -78,18 +68,8 @@ export async function getStoriesByRange(
   const limit = end;
   const storyIds = await getTopStoryIds(limit * 2);
 
-  const stories: HNStory[] = [];
-
-  for (const id of storyIds) {
-    if (stories.length >= limit) {
-      break;
-    }
-
-    const story = await getStory(id);
-    if (story && story.score > 0) {
-      stories.push(story);
-    }
-  }
+  const results = await Promise.all(storyIds.map(id => getStory(id)));
+  const stories = results.filter((s): s is HNStory => s !== null && s.score > 0);
 
   // Return only the requested range (convert to 0-based)
   return stories.slice(start - 1, end);
