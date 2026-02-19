@@ -4,11 +4,8 @@ export function formatStoryMessage(
   story: ProcessedStory,
   index: number
 ): string {
-  const keywordsText = story.keywords.slice(0, 10).join(', ');
-
   return `${index}. <a href="${story.url}">${escapeHtml(story.title)}</a>
-🏆 ${story.score} points | 💬 ${story.commentCount} comments
-🏷️ ${escapeHtml(keywordsText)}`;
+🏆 ${story.score} points | 💬 ${story.commentCount} comments`;
 }
 
 export function formatDailyDigest(
