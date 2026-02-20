@@ -22,7 +22,6 @@ export interface ProcessedStory {
   author: string;
   time: number;
   commentCount: number;
-  keywords: string[];
 }
  
 /**
@@ -145,12 +144,5 @@ export class TelegramAPIError extends Error {
   ) {
     super(message);
     this.name = 'TelegramAPIError';
-  }
-}
-
-export class KeywordExtractionError extends Error {
-  constructor(message: string, public cause?: Error) {
-    super(message);
-    this.name = 'KeywordExtractionError';
   }
 }

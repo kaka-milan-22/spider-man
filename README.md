@@ -1,6 +1,6 @@
 # HN & Ars Technica Telegram Bot
 
-A Cloudflare Worker that automatically fetches daily Top 10 Hacker News stories and Ars Technica articles, sending them to your Telegram group with keyword extraction and article summaries.
+A Cloudflare Worker that automatically fetches daily Top 10 Hacker News stories and Ars Technica articles, sending them to your Telegram group.
 
 ## Languages
 
@@ -14,10 +14,9 @@ Default: English 🇺🇸
 - **Crypto Prices**: Get real-time cryptocurrency prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX)
 - **Exchange Rates**: Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND)
 - **Bot Commands**: On-demand stories via Telegram commands
-- **Smart Caching**: 2-hour cache for command results, 1-hour for Ars RSS
-- **Keyword Extraction**: Extracts 10 keywords from each HN article with stemming (local, no AI API)
+- **Smart Caching**: 1-hour KV cache for both HN and Ars Technica results
 - **HTML Formatting**: Robust message formatting using HTML (more reliable than Markdown)
-- **Deduplication**: Uses Cloudflare KV (7-day TTL) for HN stories
+- **Error Reporting**: Command failures are reported back to the user with the reason
 - **Cron Trigger**: Runs daily at 10:30 AM Beijing Time
 
 ## Requirements
@@ -100,9 +99,7 @@ npm run trigger
 | `/exrate` | Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND) |
 | `/flushcache` | Clear all cached data |
 
-Command results are cached:
-- Hacker News: 2 hours
-- Ars Technica: 1 hour
+Command results are cached for 1 hour (both HN and Ars Technica).
 
 ## CLI Commands
 
@@ -142,8 +139,7 @@ hn-telegram-bot/
 ├── src/
 │   ├── index.ts          # Main Worker handler
 │   ├── hn-api.ts         # Hacker News API client
-│   ├── ars-api.ts        # Ars Technica RSS client
-│   ├── keywords.ts       # Keyword extraction
+│   ├── ars-api.ts        # Ars Technica RSS client (with KV cache)
 │   ├── telegram.ts       # Telegram Bot API client
 │   ├── formatters.ts     # Message formatting (HTML)
 │   ├── crypto.ts         # Crypto price fetching
@@ -209,17 +205,15 @@ Ranking Score = (Points - 1) / (Age + 2)^Gravity
 ### Scheduled Digest
 
 1. Cron trigger runs daily at 10:30 AM Beijing Time
-2. Fetch top stories from HN Firebase API
-3. Check KV to skip already-sent stories
-4. Extract keywords from article content
-5. Send formatted message to Telegram
+2. Fetch top 10 stories from HN API (same as `/top10hn`)
+3. Send formatted digest to Telegram
 
 ### Bot Commands
 
 1. Webhook receives command from Telegram
-2. Check cache (1-2 hour TTL depending on source)
-3. If cache miss: fetch, process, format
-4. Send formatted message
+2. Check KV cache (1-hour TTL)
+3. If cache miss: fetch, format, cache, send
+4. On any error: send failure reason back to user
 
 ### Ars Technica Output Format
 
