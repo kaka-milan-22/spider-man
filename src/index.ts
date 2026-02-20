@@ -121,7 +121,7 @@ async function handleCommand(
         await sendMessage(config.telegramBotToken, String(chatId), '❌ Currency API key not configured. Please contact the bot admin.');
         return;
       }
-      const rates = await fetchExchangeRates(config.currencyApiKey);
+      const rates = await fetchExchangeRates(config.currencyApiKey, env.HN_STORIES);
       const message = formatExchangeRates(rates);
       await sendMessage(config.telegramBotToken, String(chatId), message);
       console.log(`Sent exchange rates`);

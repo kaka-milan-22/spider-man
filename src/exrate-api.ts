@@ -1,6 +1,9 @@
 // API client for currencyapi.com to fetch USD exchange rates to 7 Asian currencies
 // - PHP, MYR, TWD, HKD, CNY, THB, VND
 
+const CACHE_KEY = 'exrate:latest';
+const CACHE_TTL = 3600; // 60 minutes
+
 export interface ExchangeRates {
   PHP: number;
   MYR: number;
@@ -49,9 +52,16 @@ function formatUpdatedAt(iso?: string): string | undefined {
   return `${yyyy}-${mm}-${dd} ${hh}:${min} UTC`;
 }
 
-// Fetch exchange rates from Currency API (no caching logic)
-export async function fetchExchangeRates(apiKey: string): Promise<ExchangeRates> {
+// Fetch exchange rates from Currency API with KV caching
+export async function fetchExchangeRates(apiKey: string, kv: KVNamespace): Promise<ExchangeRates> {
   try {
+    const cached = await kv.get(CACHE_KEY, 'json');
+    if (cached) {
+      console.log('Cache hit for exchange rates');
+      return cached as ExchangeRates;
+    }
+
+    console.log('Fetching exchange rates from Currency API...');
     const url = new URL('https://api.currencyapi.com/v3/latest');
     url.searchParams.set('base_currency', 'USD');
     url.searchParams.set('currencies', 'PHP,MYR,TWD,HKD,CNY,THB,VND');
@@ -84,9 +94,25 @@ export async function fetchExchangeRates(apiKey: string): Promise<ExchangeRates>
       updatedAt,
     };
 
+    await kv.put(CACHE_KEY, JSON.stringify(rates), {
+      expirationTtl: CACHE_TTL,
+    });
+    console.log('Cached exchange rates');
+
     return rates;
   } catch (error) {
-    // Re-throw with clearer context to the caller
+    console.error('Error fetching exchange rates:', error);
+    
+    try {
+      const cached = await kv.get(CACHE_KEY, 'json');
+      if (cached) {
+        console.log('Returning cached data after fetch error');
+        return cached as ExchangeRates;
+      }
+    } catch (cacheError) {
+      console.warn('Failed to read fallback cache:', cacheError);
+    }
+    
     throw new Error(`Failed to fetch exchange rates: ${String(error)}`);
   }
 }

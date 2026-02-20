@@ -1,6 +1,14 @@
 # Changelog
 
-## [2026-02-19] - Latest Update
+## [2026-02-20] - Latest Update
+
+### ✨ Added
+- **Exchange Rates Caching**: `/exrate` command now uses 1-hour KV cache
+  - Reduces API calls to currencyapi.com
+  - Faster response times for repeated requests
+  - Fallback to cached data on API errors
+
+## [2026-02-19] - Previous Update
 
 ### 🔧 Fixed
 - **Telegram Markdown Parsing Error**: Switched from Markdown to HTML formatting

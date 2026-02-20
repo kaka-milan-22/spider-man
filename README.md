@@ -14,7 +14,7 @@ Default: English 🇺🇸
 - **Crypto Prices**: Get real-time cryptocurrency prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX)
 - **Exchange Rates**: Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND)
 - **Bot Commands**: On-demand stories via Telegram commands
-- **Smart Caching**: 1-hour KV cache for both HN and Ars Technica results
+- **Smart Caching**: 1-hour KV cache for HN, Ars Technica, and exchange rates
 - **HTML Formatting**: Robust message formatting using HTML (more reliable than Markdown)
 - **Error Reporting**: Command failures are reported back to the user with the reason
 - **Cron Trigger**: Runs daily at 10:30 AM Beijing Time
@@ -99,7 +99,7 @@ npm run trigger
 | `/exrate` | Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND) |
 | `/flushcache` | Clear all cached data |
 
-Command results are cached for 1 hour (both HN and Ars Technica).
+Command results are cached for 1 hour (HN, Ars Technica, and exchange rates).
 
 ## CLI Commands
 
