@@ -147,7 +147,7 @@ async function handleCommand(
 
     if (isEthCommand(command)) {
       console.log(`Processing /eth command for chat ${chatId}`);
-      const message = await fetchAndFormatEthBrief();
+      const message = await fetchAndFormatEthBrief(env.HN_STORIES);
       await sendMessage(config.telegramBotToken, String(chatId), message);
       console.log('Sent ETH brief');
       return;

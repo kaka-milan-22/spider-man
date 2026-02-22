@@ -176,7 +176,13 @@ async function fetchDexVolume(): Promise<{
   }
 }
 
-export async function fetchAndFormatEthBrief(): Promise<string> {
+export async function fetchAndFormatEthBrief(kv: KVNamespace): Promise<string> {
+  const CACHE_KEY = 'eth:brief';
+  const CACHE_TTL = 3600;
+
+  const cached = await kv.get(CACHE_KEY);
+  if (cached) return cached;
+
   const [prices, tvl, protocols, stablecoins, dex] = await Promise.all([
     fetchPrices(),
     fetchChainTvl(),
@@ -254,5 +260,7 @@ export async function fetchAndFormatEthBrief(): Promise<string> {
   lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   lines.push('Data: CoinGecko + DeFiLlama');
 
-  return lines.join('\n');
+  const message = lines.join('\n');
+  await kv.put(CACHE_KEY, message, { expirationTtl: CACHE_TTL });
+  return message;
 }
