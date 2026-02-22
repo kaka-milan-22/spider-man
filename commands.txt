@@ -3,3 +3,4 @@ top10ars - Get top 10 Ars Technica articles
 flushcache - Clear all cache entries
 btc - Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX)
 exrate - Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND)
+eth - ETH daily brief: price, DeFi TVL, top protocols, stablecoins, DEX volume

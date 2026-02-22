@@ -11,7 +11,7 @@ Default: English 🇺🇸
 
 - **Hacker News**: Fetches Top 10 stories using HN's official ranking algorithm (considers time, points, and comments)
 - **Ars Technica**: Fetches Top 10 articles from RSS feed with excerpts
-- **Crypto Prices**: Get real-time cryptocurrency prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX)
+- **ETH Daily Brief**: On-demand `/eth` brief — ETH/BTC price, DeFi TVL, top 5 protocols, top 4 stablecoins, DEX volume (CoinGecko + DeFiLlama)
 - **Exchange Rates**: Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND)
 - **Bot Commands**: On-demand stories via Telegram commands
 - **Smart Caching**: 1-hour KV cache for HN, Ars Technica, and exchange rates
@@ -96,6 +96,7 @@ npm run trigger
 | `/top10hn` | Get top 10 Hacker News stories (HN official ranking: considers time, points, comments) |
 | `/top10ars` | Get top 10 Ars Technica articles (with excerpts and dates) |
 | `/btc` | Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX) |
+| `/eth` | ETH daily brief: ETH/BTC price, DeFi TVL, top 5 ETH protocols, top 4 stablecoins, DEX 24h/7d volume |
 | `/exrate` | Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND) |
 | `/flushcache` | Clear all cached data |
 
@@ -143,6 +144,7 @@ hn-telegram-bot/
 │   ├── telegram.ts       # Telegram Bot API client
 │   ├── formatters.ts     # Message formatting (HTML)
 │   ├── crypto.ts         # Crypto price fetching
+│   ├── eth-brief.ts      # ETH daily brief (CoinGecko + DeFiLlama)
 │   ├── exrate-api.ts     # Exchange rate API
 │   ├── config.ts         # Environment config
 │   └── types.ts          # TypeScript types
@@ -159,6 +161,7 @@ hn-telegram-bot/
 | Hacker News | JSON API | `https://hacker-news.firebaseio.com/v0/topstories.json` |
 | Ars Technica | RSS Feed | `https://arstechnica.com/feed/` |
 | Crypto Prices | API | CoinGecko |
+| ETH DeFi Data | API | DeFiLlama |
 | Exchange Rates | API | currencyapi.com |
 
 ## Ranking Algorithm

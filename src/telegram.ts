@@ -58,6 +58,11 @@ export function isExRateCommand(command: string): boolean {
   return command === '/exrate';
 }
 
+// Detect /eth command
+export function isEthCommand(command: string): boolean {
+  return command === '/eth';
+}
+
 export async function sendMessage(
   botToken: string,
   chatId: string,

@@ -9,11 +9,13 @@ import {
   isFlushCacheCommand,
   isCryptoCommand,
   isExRateCommand,
+  isEthCommand,
   sendMessage,
 } from './telegram';
 import { getArsTopStories } from './ars-api';
 import { formatArsArticles } from './formatters';
 import { fetchExchangeRates, formatExchangeRates } from './exrate-api';
+import { fetchAndFormatEthBrief } from './eth-brief';
 
 async function flushCache(kv: KVNamespace): Promise<number> {
   let deleted = 0;
@@ -141,6 +143,14 @@ async function handleCommand(
       const processedStories = await fetchTopHNStories(env.HN_STORIES);
       await sendStoriesRange(config.telegramBotToken, String(chatId), processedStories, 1, 10);
       console.log(`Sent ${processedStories.length} stories`);
+    }
+
+    if (isEthCommand(command)) {
+      console.log(`Processing /eth command for chat ${chatId}`);
+      const message = await fetchAndFormatEthBrief();
+      await sendMessage(config.telegramBotToken, String(chatId), message);
+      console.log('Sent ETH brief');
+      return;
     }
   } catch (error) {
     console.error(`Error handling command ${command}:`, error);
