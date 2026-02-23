@@ -2,7 +2,7 @@
 // - PHP, MYR, TWD, HKD, CNY, THB, VND
 
 const CACHE_KEY = 'exrate:latest';
-const CACHE_TTL = 3600; // 60 minutes
+const CACHE_TTL = 7200; // 120 minutes
 
 export interface ExchangeRates {
   PHP: number;

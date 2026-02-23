@@ -14,7 +14,7 @@ Default: English 🇺🇸
 - **ETH Daily Brief**: On-demand `/eth` brief — ETH/BTC price, DeFi TVL, top 5 protocols, top 4 stablecoins, DEX volume (CoinGecko + DeFiLlama)
 - **Exchange Rates**: Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND)
 - **Bot Commands**: On-demand stories via Telegram commands
-- **Smart Caching**: 1-hour KV cache for HN, Ars Technica, and exchange rates
+- **Smart Caching**: 2-hour KV cache for HN, Ars Technica, exchange rates, and ETH brief
 - **HTML Formatting**: Robust message formatting using HTML (more reliable than Markdown)
 - **Error Reporting**: Command failures are reported back to the user with the reason
 - **Cron Trigger**: Runs daily at 10:30 AM Beijing Time
@@ -100,7 +100,7 @@ npm run trigger
 | `/exrate` | Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND) |
 | `/flushcache` | Clear all cached data |
 
-Command results are cached for 1 hour (HN, Ars Technica, and exchange rates).
+Command results are cached for 2 hours (HN, Ars Technica, exchange rates, and ETH brief).
 
 ## CLI Commands
 
@@ -214,7 +214,7 @@ Ranking Score = (Points - 1) / (Age + 2)^Gravity
 ### Bot Commands
 
 1. Webhook receives command from Telegram
-2. Check KV cache (1-hour TTL)
+2. Check KV cache (2-hour TTL)
 3. If cache miss: fetch, format, cache, send
 4. On any error: send failure reason back to user
 

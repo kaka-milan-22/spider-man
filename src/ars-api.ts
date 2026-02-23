@@ -2,7 +2,7 @@ import { ArsArticle, ArsAPIError } from './types';
 
 const ARS_RSS_URL = 'https://arstechnica.com/feed/';
 const CACHE_KEY = 'ars:top10';
-const CACHE_TTL = 3600; // 60 minutes
+const CACHE_TTL = 7200; // 120 minutes
 
 export async function getArsTopStories(kv: KVNamespace): Promise<ArsArticle[]> {
   try {

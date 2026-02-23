@@ -1,6 +1,13 @@
 # Changelog
 
-## [2026-02-20] - Latest Update
+## [2026-02-23] - Latest Update
+
+### 📝 Changed
+- **Cache TTL Extended to 2 Hours**: `/top10hn`, `/top10ars`, `/exrate`, `/eth` commands now cache results for 2 hours (was 1 hour)
+  - Reduces upstream API calls
+  - More stable response times
+
+## [2026-02-20] - Previous Update
 
 ### ✨ Added
 - **Exchange Rates Caching**: `/exrate` command now uses 1-hour KV cache

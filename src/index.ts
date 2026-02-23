@@ -49,7 +49,7 @@ function processStory(story: HNStory): ProcessedStory | null {
 }
 
 const HN_CACHE_KEY = 'hn:top10';
-const HN_CACHE_TTL = 3600; // 60 minutes
+const HN_CACHE_TTL = 7200; // 120 minutes
 
 async function fetchTopHNStories(kv: KVNamespace): Promise<ProcessedStory[]> {
   try {

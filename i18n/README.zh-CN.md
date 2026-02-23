@@ -14,7 +14,7 @@
 - **加密货币价格**：获取实时加密货币价格（BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX）
 - **汇率查询**：获取美元汇率（PHP, MYR, TWD, HKD, CNY, THB, VND）
 - **Bot 命令**：通过 Telegram 命令按需获取文章
-- **智能缓存**：命令结果缓存 2 小时，Ars RSS 缓存 1 小时
+- **智能缓存**：HN、Ars Technica、汇率、ETH brief 命令结果均缓存 2 小时
 - **关键词提取**：本地提取每篇 HN 文章的 10 个关键词，支持词干提取（无需 AI API）
 - **HTML 格式化**：使用 HTML 格式发送消息（比 Markdown 更稳定可靠）
 - **去重机制**：使用 Cloudflare KV 去重（7 天过期）
@@ -102,7 +102,9 @@ npm run trigger
 
 命令结果缓存时间：
 - Hacker News：2 小时
-- Ars Technica：1 小时
+- Ars Technica：2 小时
+- 汇率（/exrate）：2 小时
+- ETH brief（/eth）：2 小时
 
 ## 常用命令
 
@@ -225,7 +227,7 @@ hn-telegram-bot/
 ### Bot 命令
 
 1. Webhook 接收来自 Telegram 的命令
-2. 检查缓存（1-2 小时过期，根据来源）
+2. 检查缓存（2 小时过期）
 3. 如果缓存未命中：获取、处理、格式化
 4. 发送格式化消息
 

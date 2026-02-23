@@ -178,7 +178,7 @@ async function fetchDexVolume(): Promise<{
 
 export async function fetchAndFormatEthBrief(kv: KVNamespace): Promise<string> {
   const CACHE_KEY = 'eth:brief';
-  const CACHE_TTL = 3600;
+  const CACHE_TTL = 7200;
 
   const cached = await kv.get(CACHE_KEY);
   if (cached) return cached;
