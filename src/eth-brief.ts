@@ -25,9 +25,16 @@ interface DefiLlamaProtocol {
   chains?: string[];
 }
 
+interface DefiLlamaChainTvlEntry {
+  date: number;
+  tvl: number;
+}
+
 interface DefiLlamaDexProtocol {
   name: string;
   total24h?: number;
+  chains?: string[];
+  breakdown24h?: Record<string, Record<string, number>>;
 }
 
 interface DefiLlamaDexOverview {
@@ -102,12 +109,14 @@ async function fetchPrices(): Promise<{ eth: { price: number; change24h: number;
 
 async function fetchChainTvl(): Promise<{ ethereum: number; total: number } | null> {
   try {
-    const res = await fetch(`${DEFILLAMA_API}/v2/chains`);
+    // /v2/chains is rate-limited from CF Workers IPs; use per-chain historical endpoint instead
+    const res = await fetch(`${DEFILLAMA_API}/v2/historicalChainTvl/ethereum`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' },
+    });
     if (!res.ok) return null;
-    const chains = (await res.json()) as DefiLlamaChain[];
-    const ethereum = chains.find((c) => c.name === 'Ethereum')?.tvl ?? 0;
-    const total = chains.reduce((sum, c) => sum + (c.tvl ?? 0), 0);
-    return { ethereum, total };
+    const entries = (await res.json()) as DefiLlamaChainTvlEntry[];
+    const ethereum = entries.length > 0 ? entries[entries.length - 1].tvl : 0;
+    return { ethereum, total: 0 };
   } catch {
     return null;
   }
@@ -115,7 +124,7 @@ async function fetchChainTvl(): Promise<{ ethereum: number; total: number } | nu
 
 async function fetchTopEthProtocols(): Promise<Array<{ name: string; tvl: number; change1d: number }>> {
   try {
-    const res = await fetch(`${DEFILLAMA_API}/protocols`);
+    const res = await fetch(`${DEFILLAMA_API}/protocols`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } });
     if (!res.ok) return [];
     const protocols = (await res.json()) as DefiLlamaProtocol[];
     return protocols
@@ -134,7 +143,7 @@ async function fetchTopEthProtocols(): Promise<Array<{ name: string; tvl: number
 
 async function fetchTopEthStablecoins(): Promise<Array<{ symbol: string; circulating: number }>> {
   try {
-    const res = await fetch(`${STABLECOINS_API}/stablecoins?includePrices=true`);
+    const res = await fetch(`${STABLECOINS_API}/stablecoins?includePrices=true`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } });
     if (!res.ok) return [];
     const data = (await res.json()) as StablecoinsResponse;
     return (data.peggedAssets ?? [])
@@ -156,20 +165,35 @@ async function fetchDexVolume(): Promise<{
   top: Array<{ name: string; volume24h: number }>;
 } | null> {
   try {
+    // /overview/dexs/ethereum is rate-limited from CF Workers IPs; use global endpoint and filter by chain
     const res = await fetch(
-      `${DEFILLAMA_API}/overview/dexs/ethereum?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true`
+      `${DEFILLAMA_API}/overview/dexs?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true`,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } }
     );
     if (!res.ok) return null;
     const data = (await res.json()) as DefiLlamaDexOverview;
-    const top = (data.protocols ?? [])
-      .filter((p) => (p.total24h ?? 0) > 0)
-      .sort((a, b) => (b.total24h ?? 0) - (a.total24h ?? 0))
-      .slice(0, 5)
-      .map((p) => ({ name: p.name, volume24h: p.total24h ?? 0 }));
+
+    // Compute ETH-specific volume from per-protocol breakdown24h
+    const ethProtocols: Array<{ name: string; volume24h: number }> = [];
+    let ethTotal24h = 0;
+    for (const p of data.protocols ?? []) {
+      const bd = p.breakdown24h ?? {};
+      // Key can be 'ethereum' or 'Ethereum' depending on DeFiLlama response
+      const ethKey = Object.keys(bd).find((k) => k.toLowerCase() === 'ethereum');
+      const ethVol = ethKey
+        ? Object.values(bd[ethKey]).reduce((s: number, v: number) => s + v, 0)
+        : 0;
+      if (ethVol > 0) {
+        ethProtocols.push({ name: p.name, volume24h: ethVol });
+        ethTotal24h += ethVol;
+      }
+    }
+    ethProtocols.sort((a, b) => b.volume24h - a.volume24h);
+
     return {
-      total24h: data.total24h ?? 0,
-      total7d: data.total7d ?? 0,
-      top,
+      total24h: ethTotal24h,
+      total7d: 0, // 7d per-chain breakdown not available from global endpoint
+      top: ethProtocols.slice(0, 5),
     };
   } catch {
     return null;
@@ -216,7 +240,6 @@ export async function fetchAndFormatEthBrief(kv: KVNamespace): Promise<string> {
   lines.push('📊 <b>DeFi TVL (DeFiLlama)</b>');
   if (tvl) {
     lines.push(`  Ethereum  <b>${fmtUSD(tvl.ethereum)}</b>`);
-    lines.push(`  全链总计  <b>${fmtUSD(tvl.total)}</b>`);
   } else {
     lines.push('  ❌ TVL 获取失败');
   }
@@ -247,7 +270,8 @@ export async function fetchAndFormatEthBrief(kv: KVNamespace): Promise<string> {
   // DEX volume
   lines.push('🔄 <b>ETH DEX 交易量</b>');
   if (dex) {
-    lines.push(`  24h 合计  <b>${fmtUSD(dex.total24h)}</b>    7d 合计  <b>${fmtUSD(dex.total7d)}</b>`);
+    const vol7dStr = dex.total7d > 0 ? `    7d 合计  <b>${fmtUSD(dex.total7d)}</b>` : '';
+    lines.push(`  24h 合计  <b>${fmtUSD(dex.total24h)}</b>${vol7dStr}`);
     lines.push('  ── Top 5 ──');
     dex.top.forEach((d, i) => {
       const name = d.name.padEnd(22);
