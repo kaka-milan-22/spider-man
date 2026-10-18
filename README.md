@@ -1,260 +1,231 @@
-# HN & Ars Technica Telegram Bot
+# Spider-Man Telegram Bot
 
-A Cloudflare Worker that automatically fetches daily Top 10 Hacker News stories and Ars Technica articles, sending them to your Telegram group.
+A TypeScript Cloudflare Worker for group news, market quotes and economic calendars.
+It sends a Hacker News digest daily at **10:30 UTC+8**; all other features are requested through Telegram commands.
 
-## Languages
+[English](README.md) · [简体中文](i18n/README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
-Default: English 🇺🇸  
-🇺🇸 [English Documentation](README.md) | 🇨🇳 [中文文档](i18n/README.zh-CN.md)
+## Commands
 
-## Features
+Public commands work for every member of the configured group. Commands from other groups and private chats are ignored.
 
-- **Hacker News**: Fetches Top 10 stories using HN's official ranking algorithm (considers time, points, and comments)
-- **Ars Technica**: Fetches Top 10 articles from RSS feed with excerpts
-- **ETH Daily Brief**: On-demand `/eth` brief — ETH/BTC price, DeFi TVL, top 5 protocols, top 4 stablecoins, DEX volume (CoinGecko + DeFiLlama)
-- **Exchange Rates**: Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND)
-- **Bot Commands**: On-demand stories via Telegram commands
-- **Smart Caching**: 2-hour KV cache for HN, Ars Technica, exchange rates, and ETH brief
-- **HTML Formatting**: Robust message formatting using HTML (more reliable than Markdown)
-- **Error Reporting**: Command failures are reported back to the user with the reason
-- **Cron Trigger**: Runs daily at 10:30 AM Beijing Time
+| Command | Result | Application cache |
+| --- | --- | --- |
+| `/top10hn` | Top 10 valid stories in the order supplied by Hacker News | 2 hours |
+| `/top10ars` | Latest 10 Ars Technica RSS articles, with excerpts and dates | 2 hours |
+| `/btc` | Coinbase USD quotes and 24-hour changes; unavailable pairs are omitted | None |
+| `/stocks` | Nine US-listed stocks and one gold ETF, with daily changes | None |
+| `/oil` | Brent/WTI Futures and Metro Manila gasoline/Diesel reference prices | None |
+| `/market` | S&P 500, Nasdaq Composite, DXY, US 10Y Treasury yield and VIX | None |
+| `/calendar` | Official FOMC, CPI, Employment Situation and EIA releases over the next 7 days | None |
+| `/calendar 30` | The same calendar over the next 30 days | None |
+| `/eth` | ETH/BTC prices, Ethereum DeFi TVL, protocols, stablecoins and DEX volume | 2 hours |
+| `/exrate` | USD exchange rates for PHP, MYR, TWD, HKD, CNY, THB and VND | 2 hours |
+| `/status` | Recent source results, request duration, last success and live Webhook status | Owner only |
+| `/flushcache` | Clear every key in the bound KV namespace, including status records | Owner only |
 
-## Requirements
+`/btc` requests BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX, UNI and AAVE; upstream availability determines which pairs appear.
+`/alert` is not implemented, and there is no background market polling.
 
-- Node.js 18+
-- Cloudflare Account
-- Telegram Bot Token (from @BotFather)
-- Telegram Chat ID
+## Quotes and display
 
-## Install
+### Stocks and gold
+
+`/stocks` uses Yahoo Finance and keeps the compact `/btc` layout.
+
+| Symbol | Instrument |
+| --- | --- |
+| AAPL | Apple |
+| NVDA | NVIDIA |
+| TSLA | Tesla |
+| TSM | Taiwan Semiconductor Manufacturing Company US ADR |
+| AMZN | Amazon; represents the parent company of AWS |
+| MSFT | Microsoft |
+| GLD | SPDR Gold Shares ETF; USD per share, not spot gold per ounce |
+| NET | Cloudflare |
+| META | Meta Platforms |
+| GOOGL | Alphabet Class A |
+
+Quotes use the regular trading session, including the most recent session when the market is closed.
+Changes are relative to the previous session's close. The footer shows the source quote time in UTC+8.
+
+### International oil and Philippine fuel
+
+`/oil` shows Brent (`BZ=F`) and WTI (`CL=F`) Futures in **USD/barrel**, then Metro Manila / NCR averages for **Unleaded 91** and **Diesel** in **PHP/liter**.
+Unleaded 91 is RON 91 unleaded gasoline. Philippine figures come from [GasWatch PH](https://gaswatchph.com/), which aggregates DOE advisories and community reports.
+They are weekly regional reference prices; individual stations can charge different amounts.
+The publication date is shown, with a warning when it is at least 14 days old. The source link remains clickable, with its Telegram preview disabled.
+
+### Market overview
+
+`/market` uses `^GSPC`, `^IXIC`, `DX-Y.NYB`, `^TNX` and `^VIX`.
+Index values are points, not USD amounts. Yahoo's `^TNX` already represents a percentage; its change is displayed in basis points (**1 bp = 0.01 percentage point**).
+
+The mobile layout uses three lines per instrument: a bold name, value plus change, then the source timestamp. Groups are separated by a blank line; UTC+8 is stated once at the top. Values are not padded into wide columns.
+
+Illustrative output, not a live quote:
+
+```text
+🌐 市场概览
+报价时间：UTC+8
+
+S&P 500
+6,000.00  🔴 -1.00%
+2026-10-17 04:00
+
+US 10Y
+4.250%  🟢 +2.0 bp
+2026-10-17 03:00
+```
+
+`/stocks`, `/oil`, `/market` and `/calendar` make fresh requests with `cache: 'no-store'` and do not fall back to cached prices or calendars.
+They identify unavailable sources while preserving successful results. Fresh requests do not remove upstream delays or turn weekly publications into live data.
+The Wrangler `cache_option_enabled` flag enables this fetch option with the project's compatibility date.
+
+## Economic calendar
+
+`/calendar` defaults to the next 7 days; `/calendar 7` and `/calendar 30` are also accepted.
+It fetches the [Fed meeting calendar](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm), [BLS ICS schedule](https://www.bls.gov/schedule/news_release/bls.ics) and [EIA release schedule](https://www.eia.gov/petroleum/supply/weekly/schedule.php) on each request.
+
+US Eastern times are converted through the IANA `America/New_York` timezone into UTC+8, including DST and date rollover.
+EIA holiday exceptions replace ordinary Wednesday releases. FOMC dates use the final meeting day; the customary 14:00 ET release time is marked as an assumption subject to official changes.
+Unavailable sources, changed formats or calendars that do not cover the requested period produce an incomplete-data notice. They are never treated as proof that no events are scheduled.
+Calendar source links have previews disabled.
+
+## Access control and diagnostics
+
+`TELEGRAM_CHAT_ID` is both the scheduled destination and the only group allowed to execute commands. No member-by-member allowlist is needed.
+For `/status` and `/flushcache`, the Worker asks Telegram for the current group owner (`creator`) on every invocation. Ordinary administrators, former owners and anonymous senders are denied silently; failed owner lookup also denies access.
+Anonymous administrators must switch to their personal identity to use these commands.
+
+The setup script hides owner commands from public and administrator menus, adding them to the owner's `chat_member` menu only.
+Menu visibility does not grant permission or hide messages already posted in the group. After an ownership transfer, rerun setup; if the former owner is no longer an administrator, also remove their old custom menu scope. Telegram cannot enumerate all historical user/language scopes.
+
+`/status` reports observations from actual command calls, not continuous health probes. It queries Telegram Webhook status live.
+Only result metadata, duration and last successful call time are stored under `status:v1:*`, for up to 30 days. Quote payloads, credentials and raw exception text are not stored in these records.
+KV can lag under concurrent use. Cache-based results are labelled: a cache hit is not an upstream health check. Commands show “no record” until used; `/flushcache` resets the records.
+
+| Endpoint | Access |
+| --- | --- |
+| `GET /health` | Public health response |
+| `POST /webhook` | Requires `X-Telegram-Bot-Api-Secret-Token` |
+| `POST /trigger` | Same secret; sends the HN digest to the configured group |
+
+An absent or incorrect secret rejects the protected HTTP request. Cron runs internally without this header.
+Version preview URLs are disabled with `preview_urls = false` so older versions cannot provide an alternative unprotected entry point.
+
+## Setup and deployment
+
+Use Node.js 20+ compatible with your installed Wrangler version, npm, a Cloudflare account and a Telegram bot created through [@BotFather](https://t.me/botfather).
+Add the bot to the target group and obtain its numeric group ID. For a new bot without a registered Webhook, the Telegram `getUpdates` API can identify it after a group command is sent. Keep bot tokens out of browser URLs and logs.
+
+For a **new installation**, copy `wrangler.toml.example` to `wrangler.toml`; preserve the existing configuration when updating a deployed bot.
+Set your Worker name, Cloudflare `account_id` if needed, and KV binding ID. Use a separate preview KV namespace for development.
 
 ```bash
 npm install
-```
-
-## Quick Start
-
-### 1. Create Telegram Bot
-
-1. Open Telegram and search for [@BotFather](https://t.me/botfather)
-2. Send `/newbot` and follow the prompts
-3. Save your bot token
-
-### 2. Get Chat ID
-
-1. Add bot to your group
-2. Send a message in the group
-3. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
-4. Find `"chat":{"id":-123456789` (negative for groups)
-
-### 3. Configure Wrangler
-
-```bash
-# Copy example config
-cp wrangler.toml.example wrangler.toml
-
-# Login to Cloudflare
 npx wrangler login
-
-# Create KV namespace
 npm run kv:create
+npx wrangler kv namespace create HN_STORIES --preview
 ```
 
-Update `wrangler.toml` with your KV namespace ID.
-
-### 4. Set Secrets
+Create the Worker with `npm run deploy` if it does not yet exist, then store its secrets through Wrangler:
 
 ```bash
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 npx wrangler secret put TELEGRAM_CHAT_ID
+npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
+# Required only for /exrate:
+npx wrangler secret put CURRENCY_API_KEY
 ```
 
-### 5. Deploy
+Use a random 32–256-character Webhook secret containing letters, digits, underscores or hyphens.
+Inject the same `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and `TELEGRAM_WEBHOOK_SECRET` into the setup process using your secret manager, then run:
 
 ```bash
+npm run telegram:setup
+```
+
+For a new bot, also supply `TELEGRAM_WEBHOOK_URL=https://your-worker.workers.dev/webhook` in that environment.
+Otherwise the setup script reuses the current Webhook URL. It reads no local secret files and prints no credentials.
+It configures the authenticated Webhook and the default, English and Chinese menus. Add other existing menu languages via `TELEGRAM_COMMAND_LANGUAGES` (comma-separated two-letter codes).
+
+To upgrade an older deployment without Webhook authentication: store the shared secret and run setup before deploying the protected handler.
+For later updates, validate and deploy code, then rerun menu setup whenever commands change:
+
+```bash
+npm run typecheck
+npm test
 npm run deploy
+npm run telegram:setup
 ```
 
-### 6. Set Webhook
+The tests run offline against the real TypeScript modules with mocked upstream APIs; they do not send Telegram messages or access Cloudflare credentials.
+Production smoke checks can start with `/health`, followed by the relevant commands in the configured group.
 
-```bash
-curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://your-worker.workers.dev/webhook"}'
-```
+### Configuration reference
 
-### 7. Test
+| Setting | Purpose |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Worker Secret and setup-process environment variable |
+| `TELEGRAM_CHAT_ID` | Numeric allowed group ID, stored as a Worker Secret and supplied to setup |
+| `TELEGRAM_WEBHOOK_SECRET` | Shared secret for Webhook and manual trigger authentication |
+| `CURRENCY_API_KEY` | currencyapi.com key required for `/exrate` |
+| `TELEGRAM_WEBHOOK_URL` | Setup-only URL; required when no Webhook exists |
+| `TELEGRAM_COMMAND_LANGUAGES` | Setup-only additional menu languages |
+| `HN_TOP_N` | Retained configuration value; current digest and HN command fetch the top 10 |
 
-```bash
-npm run trigger
-```
+The only cron remains the daily HN digest:
 
-## Bot Commands
-
-| Command | Description |
-|---------|-------------|
-| `/top10hn` | Get top 10 Hacker News stories (HN official ranking: considers time, points, comments) |
-| `/top10ars` | Get top 10 Ars Technica articles (with excerpts and dates) |
-| `/btc` | Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX) |
-| `/eth` | ETH daily brief: ETH/BTC price, DeFi TVL, top 5 ETH protocols, top 4 stablecoins, DEX 24h/7d volume |
-| `/exrate` | Get USD exchange rates (PHP, MYR, TWD, HKD, CNY, THB, VND) |
-| `/flushcache` | Clear all cached data |
-
-Command results are cached for 2 hours (HN, Ars Technica, exchange rates, and ETH brief).
-
-## CLI Commands
-
-```bash
-npm run dev         # Local development
-npm run deploy      # Deploy to Cloudflare
-npm run logs        # View real-time logs
-npm run trigger     # Manually trigger the bot
-npm run typecheck   # Run TypeScript check
-./sync.sh           # TypeScript check + deploy
-```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `TELEGRAM_BOT_TOKEN` | Yes | Telegram bot token from @BotFather |
-| `TELEGRAM_CHAT_ID` | Yes | Target chat/group ID |
-| `HN_TOP_N` | No | Number of stories (default: 10) |
-
-### Cron Schedule
-
-Default: Daily at 10:30 AM Beijing Time (02:30 UTC)
-
-Edit `wrangler.toml`:
 ```toml
 [triggers]
-crons = ["30 2 * * *"]
+crons = ["30 2 * * *"] # 10:30 UTC+8
 ```
 
-## Project Structure
+### Local commands
 
-```
-hn-telegram-bot/
-├── src/
-│   ├── index.ts          # Main Worker handler
-│   ├── hn-api.ts         # Hacker News API client
-│   ├── ars-api.ts        # Ars Technica RSS client (with KV cache)
-│   ├── telegram.ts       # Telegram Bot API client
-│   ├── formatters.ts     # Message formatting (HTML)
-│   ├── crypto.ts         # Crypto price fetching
-│   ├── eth-brief.ts      # ETH daily brief (CoinGecko + DeFiLlama)
-│   ├── exrate-api.ts     # Exchange rate API
-│   ├── config.ts         # Environment config
-│   └── types.ts          # TypeScript types
-├── wrangler.toml         # Cloudflare config
-├── commands.txt          # Bot commands reference
-├── sync.sh               # Quick deploy script
-└── deploy.sh             # Full deployment script
+```bash
+npm run dev             # Local Worker server
+npm run test:scheduled  # Local server exposing /__scheduled for cron testing
+npm run typecheck       # TypeScript validation
+npm test                # Offline regression tests
+npm run logs            # Live Worker logs; treat request headers as sensitive
+npm run deploy          # Deploy Worker code and configured cron
+npm run telegram:setup  # Configure Webhook and command menus
 ```
 
-## Data Sources
+`npm run trigger` is an alias for scheduled local development; it does not invoke production.
+`sync.sh` validates and deploys, and `deploy.sh` installs dependencies, validates and deploys. Neither runs menu setup automatically because it requires the setup-process credentials.
 
-| Source | Type | URL |
-|--------|------|-----|
-| Hacker News | JSON API | `https://hacker-news.firebaseio.com/v0/topstories.json` |
-| Ars Technica | RSS Feed | `https://arstechnica.com/feed/` |
-| Crypto Prices | API | CoinGecko |
-| ETH DeFi Data | API | DeFiLlama |
-| Exchange Rates | API | currencyapi.com |
+## Data sources and code
 
-## Ranking Algorithm
+| Feature | Source | Main module |
+| --- | --- | --- |
+| Hacker News | Firebase HN API; retains supplied ranking order | `src/hn-api.ts` |
+| Ars Technica | Ars Technica RSS | `src/ars-api.ts` |
+| Crypto quotes | Coinbase Exchange product stats | `src/crypto.ts` |
+| Stocks, oil Futures, market indices | Yahoo Finance chart API | `src/yahoo-finance.ts`, `stocks.ts`, `oil.ts`, `market.ts` |
+| Philippine fuel | GasWatch PH published Metro Manila averages | `src/oil.ts` |
+| ETH brief | Coinbase prices, optional CoinGecko market caps, DeFiLlama | `src/eth-brief.ts` |
+| USD exchange rates | currencyapi.com | `src/exrate-api.ts` |
+| Economic calendar | Federal Reserve, BLS, EIA | `src/calendar.ts` |
+| Diagnostics | Command observations and Telegram Webhook API | `src/monitoring.ts` |
 
-### Hacker News Ranking
-
-`/top10hn` uses **HN's official ranking algorithm** (not simple score sorting).
-
-The ranking considers:
-- **Points**: Upvote count
-- **Time**: Freshness (newer is better)
-- **Comments**: Engagement level
-- **Time Decay**: Score decreases over time
-
-Formula (simplified):
-```
-Ranking Score = (Points - 1) / (Age + 2)^Gravity
-```
-
-**Why HN's algorithm?**
-- ✅ Balances freshness and popularity
-- ✅ Matches HN homepage order
-- ✅ Reflects current community interest
-- ✅ Prevents old posts from dominating
-
-### Example Comparison
-
-**Pure score sorting** (old behavior):
-```
-1. Article A - 1500 points (3 days ago)
-2. Article B - 1200 points (2 days ago)
-3. Article C - 800 points (1 hour ago)  ← Latest but ranked 3rd
-```
-
-**HN's algorithm** (current behavior):
-```
-1. Article C - 800 points (1 hour ago)   ← Hot and fresh
-2. Article D - 600 points (3 hours ago)
-3. Article A - 1500 points (3 days ago)  ← High score but outdated
-```
-
-## How It Works
-
-### Scheduled Digest
-
-1. Cron trigger runs daily at 10:30 AM Beijing Time
-2. Fetch top 10 stories from HN API (same as `/top10hn`)
-3. Send formatted digest to Telegram
-
-### Bot Commands
-
-1. Webhook receives command from Telegram
-2. Check KV cache (2-hour TTL)
-3. If cache miss: fetch, format, cache, send
-4. On any error: send failure reason back to user
-
-### Ars Technica Output Format
-
-```
-📰 Ars Technica Top 10
-
-1. Article Title (linked)
-   📝 Article excerpt...
-   📅 Feb 18, 14:30
-
-2. Article Title (linked)
-   📝 Article excerpt...
-   📅 Feb 18, 13:15
-```
-
-### Message Format
-
-All messages use **HTML formatting** for better stability:
-- Links: `<a href="url">text</a>`
-- Bold: `<b>text</b>`
-- Italic: `<i>text</i>`
-- Code: `<code>text</code>`
-
-HTML is more reliable than Markdown for handling special characters in titles.
+`src/index.ts` routes commands and cron. `src/access.ts` verifies Webhook and group access; `src/telegram.ts` handles Telegram and owner lookup; `src/display.ts` provides formatting helpers.
+`scripts/setup-telegram.mjs` registers menus and Webhook authentication. `tests/` covers source parsing, partial failures, cache compatibility, permissions and formatting.
+`commands.txt` lists public commands; setup adds the two owner-only commands separately.
 
 ## Troubleshooting
 
-### Bot not responding to commands
+**No reply:** use the configured group, check `/status` as owner, then inspect `npm run logs`. With Telegram privacy mode or multiple bots, address the command explicitly as `/market@YourBotUsername`. Check that the Webhook points to `/webhook` and uses the same secret as the Worker. Test `/health` for basic reachability.
 
-1. Check webhook: `https://api.telegram.org/bot<TOKEN>/getWebhookInfo`
-2. Verify worker URL is correct
-3. Check logs: `npm run logs`
+**Owner command missing:** run setup with the current group credentials and relevant menu languages. Use your personal identity, not anonymous administrator mode. Manually typing a command does not bypass its owner check.
 
-### Bot not sending daily messages
+**Old timestamps or unavailable prices:** check the source timestamp and market session. No application cache does not guarantee live upstream data. Philippine fuel prices are weekly. A missing source remains unavailable rather than reusing an old quote.
 
-1. Check cron schedule in `wrangler.toml`
-2. Verify secrets are set correctly
-3. Run manual trigger: `npm run trigger`
+**`/exrate` error:** confirm `CURRENCY_API_KEY`. The parser supports both flat and nested historical KV schemas and rejects missing/non-numeric rates before formatting.
+
+**No daily digest:** inspect cron and Telegram delivery logs. `POST /trigger` with the shared secret triggers a real group digest; local scheduled testing does not verify production delivery.
 
 ## License
 

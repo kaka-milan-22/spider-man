@@ -1,12 +1,16 @@
 name = "hn-telegram-bot"
+account_id = "2a8d73eae252e76331286110005b21d3"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["cache_option_enabled"]
+# Prevent older versions from exposing endpoints without the current authorization checks.
+preview_urls = false
 
 # Cron trigger - runs daily at 10:30 AM Beijing Time (02:30 UTC)
 [triggers]
 crons = ["30 2 * * *"]
 
-# KV Namespace for deduplication
+# KV namespace for cached results and status metadata
 # Replace with your actual KV namespace ID after creation
 [[kv_namespaces]]
 binding = "HN_STORIES"

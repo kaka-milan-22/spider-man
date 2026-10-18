@@ -10,27 +10,27 @@ deploy:
 
 # First-time setup - create KV namespace
 setup:
-	npx wrangler kv:namespace create HN_STORIES
+	npx wrangler kv namespace create HN_STORIES
 	@echo "KV namespace created! Now run: make secrets"
 
 # Set secrets (requires user input)
 secrets:
 	npx wrangler secret put TELEGRAM_BOT_TOKEN
 	npx wrangler secret put TELEGRAM_CHAT_ID
+	npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
 
 # View logs
 logs:
 	npx wrangler tail
 
-# Manual trigger for testing
+# Offline regression tests; scheduled development is npm run test:scheduled
 test:
-	npx wrangler triggers scheduled
+	npm test
 
 # TypeScript check
 check:
 	npx tsc --noEmit
 
-# Full release: deploy + test
-release: deploy
-	@echo "Deployed! Testing..."
-	npx wrangler triggers scheduled
+# Validate before deployment; production delivery is verified separately.
+release: check test
+	npm run deploy

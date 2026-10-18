@@ -3,6 +3,7 @@
 
 const CACHE_KEY = 'exrate:latest';
 const CACHE_TTL = 7200; // 120 minutes
+const CURRENCIES = ['PHP', 'MYR', 'TWD', 'HKD', 'CNY', 'THB', 'VND'] as const;
 
 export interface ExchangeRates {
   PHP: number;
@@ -52,13 +53,47 @@ function formatUpdatedAt(iso?: string): string | undefined {
   return `${yyyy}-${mm}-${dd} ${hh}:${min} UTC`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isValidRate(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+// Older deployments stored an envelope: { rates: {...}, upstreamLastUpdatedAt }.
+// Validate both layouts instead of treating arbitrary cached JSON as ExchangeRates.
+function normalizeRates(value: unknown): ExchangeRates | null {
+  if (!isRecord(value)) return null;
+  const rates = isRecord(value.rates) ? value.rates : value;
+  if (!CURRENCIES.every(currency => isValidRate(rates[currency]))) return null;
+  const timestamp = [value.upstreamLastUpdatedAt, rates.updatedAt, rates.upstreamUpdatedAt]
+    .find(candidate => typeof candidate === 'string');
+  return {
+    ...Object.fromEntries(CURRENCIES.map(currency => [currency, rates[currency]])) as unknown as ExchangeRates,
+    updatedAt: typeof timestamp === 'string' ? formatUpdatedAt(timestamp) : undefined,
+  };
+}
+
+async function readCachedRates(kv: KVNamespace): Promise<ExchangeRates | null> {
+  try {
+    const cached = await kv.get(CACHE_KEY, 'json');
+    const rates = normalizeRates(cached);
+    if (cached && !rates) console.warn('Ignoring invalid exchange-rate cache');
+    return rates;
+  } catch {
+    console.warn('Unable to read exchange-rate cache; requesting upstream data');
+    return null;
+  }
+}
+
 // Fetch exchange rates from Currency API with KV caching
 export async function fetchExchangeRates(apiKey: string, kv: KVNamespace): Promise<ExchangeRates> {
   try {
-    const cached = await kv.get(CACHE_KEY, 'json');
+    const cached = await readCachedRates(kv);
     if (cached) {
       console.log('Cache hit for exchange rates');
-      return cached as ExchangeRates;
+      return cached;
     }
 
     console.log('Fetching exchange rates from Currency API...');
@@ -80,19 +115,11 @@ export async function fetchExchangeRates(apiKey: string, kv: KVNamespace): Promi
     }
 
     const data = (await resp.json()) as CurrencyApiResponse;
-    const by = data.data;
-    const updatedAt = formatUpdatedAt(data.meta?.last_updated_at);
-
-    const rates: ExchangeRates = {
-      PHP: by.PHP?.value ?? 0,
-      MYR: by.MYR?.value ?? 0,
-      TWD: by.TWD?.value ?? 0,
-      HKD: by.HKD?.value ?? 0,
-      CNY: by.CNY?.value ?? 0,
-      THB: by.THB?.value ?? 0,
-      VND: by.VND?.value ?? 0,
-      updatedAt,
-    };
+    const rates = normalizeRates({
+      ...Object.fromEntries(CURRENCIES.map(currency => [currency, data?.data?.[currency]?.value])),
+      updatedAt: formatUpdatedAt(data?.meta?.last_updated_at),
+    });
+    if (!rates) throw new Error('Currency API response is missing valid exchange rates');
 
     await kv.put(CACHE_KEY, JSON.stringify(rates), {
       expirationTtl: CACHE_TTL,
@@ -103,14 +130,10 @@ export async function fetchExchangeRates(apiKey: string, kv: KVNamespace): Promi
   } catch (error) {
     console.error('Error fetching exchange rates:', error);
     
-    try {
-      const cached = await kv.get(CACHE_KEY, 'json');
-      if (cached) {
-        console.log('Returning cached data after fetch error');
-        return cached as ExchangeRates;
-      }
-    } catch (cacheError) {
-      console.warn('Failed to read fallback cache:', cacheError);
+    const cached = await readCachedRates(kv);
+    if (cached) {
+      console.log('Returning validated cached data after fetch error');
+      return cached;
     }
     
     throw new Error(`Failed to fetch exchange rates: ${String(error)}`);
@@ -119,7 +142,8 @@ export async function fetchExchangeRates(apiKey: string, kv: KVNamespace): Promi
 
 // Format the exchange rates into a human-friendly string
 export function formatExchangeRates(rates: ExchangeRates): string {
-  const formatValue = (n: number) => {
+  const formatValue = (n: unknown) => {
+    if (!isValidRate(n)) return '暂无';
     // Use thousand separators for large values, otherwise 2 decimals
     if (n >= 1000) {
       return n.toLocaleString('en-US', {

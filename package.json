@@ -1,7 +1,7 @@
 {
   "name": "hn-telegram-bot",
   "version": "1.0.0",
-  "description": "A Cloudflare Worker that sends daily Hacker News top stories to Telegram",
+  "description": "A Telegram group bot for news, market quotes, economic calendars and owner diagnostics on Cloudflare Workers",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
@@ -9,9 +9,11 @@
     "logs": "wrangler tail",
     "trigger": "wrangler dev --test-scheduled",
     "setup": "npm run kv:create && echo 'Now run: npm run secrets'",
-    "kv:create": "wrangler kv:namespace create HN_STORIES",
-    "secrets": "echo 'Run: wrangler secret put TELEGRAM_BOT_TOKEN' && echo 'Run: wrangler secret put TELEGRAM_CHAT_ID'",
-    "test": "wrangler dev --test-scheduled",
+    "kv:create": "wrangler kv namespace create HN_STORIES",
+    "secrets": "echo 'Run: wrangler secret put TELEGRAM_BOT_TOKEN' && echo 'Run: wrangler secret put TELEGRAM_CHAT_ID' && echo 'Run: wrangler secret put TELEGRAM_WEBHOOK_SECRET'",
+    "test": "node --test tests/*.test.cjs",
+    "test:scheduled": "wrangler dev --test-scheduled",
+    "telegram:setup": "node scripts/setup-telegram.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck"
   },

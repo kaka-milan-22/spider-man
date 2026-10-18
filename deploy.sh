@@ -19,7 +19,11 @@ fi
 
 # Install dependencies
 echo -e "${YELLOW}📦 Installing dependencies...${NC}"
-npm ci
+if [ -f package-lock.json ]; then
+    npm ci
+else
+    npm install
+fi
 
 # TypeScript check
 echo -e "${YELLOW}🔍 Running TypeScript check...${NC}"
@@ -31,6 +35,10 @@ if [ $? -ne 0 ]; then
 fi
 
 echo -e "${GREEN}✅ TypeScript check passed${NC}"
+
+# Offline regression tests
+echo -e "${YELLOW}🧪 Running regression tests...${NC}"
+npm test
 
 # Check if wrangler.toml exists
 if [ ! -f "wrangler.toml" ]; then
@@ -57,8 +65,10 @@ if [ $? -eq 0 ]; then
     echo "Next steps:"
     echo "  1. Set up your secrets: wrangler secret put TELEGRAM_BOT_TOKEN"
     echo "  2. Set up your secrets: wrangler secret put TELEGRAM_CHAT_ID"
-    echo "  3. Test the bot: make test"
-    echo "  4. View logs: make logs"
+    echo "  3. Set up your secrets: wrangler secret put TELEGRAM_WEBHOOK_SECRET"
+    echo "  4. For /exrate: wrangler secret put CURRENCY_API_KEY"
+    echo "  5. Inject setup environment variables, then run: npm run telegram:setup (see README)"
+    echo "  6. View logs: make logs"
 else
     echo -e "${RED}❌ Deployment failed${NC}"
     exit 1

@@ -21,7 +21,7 @@ export function getConfig(env: Env): Config {
 
   return {
     telegramBotToken,
-    telegramChatId,
+    telegramChatId: telegramChatId.trim(),
     currencyApiKey: currencyApiKey?.trim() || undefined,
     hnTopN: isNaN(hnTopN) ? 10 : hnTopN,
   };

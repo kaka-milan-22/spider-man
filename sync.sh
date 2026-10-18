@@ -4,6 +4,8 @@ set -e
 
 echo "🚀 Syncing to Cloudflare..."
 
-npx tsc --noEmit && npx wrangler deploy
+npm run typecheck
+npm test
+npm run deploy
 
 echo "✅ Done!"

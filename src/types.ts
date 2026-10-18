@@ -51,7 +51,7 @@ export interface TelegramMessagePayload {
   chat_id: string;
   text: string;
   parse_mode?: 'Markdown' | 'MarkdownV2' | 'HTML';
-  disable_web_page_preview?: boolean;
+  link_preview_options?: { is_disabled?: boolean };
 }
 
 export interface TelegramResponse {
@@ -79,6 +79,8 @@ export interface TelegramUpdate {
       first_name: string;
       username?: string;
     };
+    // Anonymous administrators and channel senders cannot prove a personal identity.
+    sender_chat?: { id: number; type: string };
     chat: {
       id: number;
       type: string;
@@ -107,6 +109,7 @@ export interface Env {
   // Secrets
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_CHAT_ID: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
   // Currency API (optional)
   CURRENCY_API_KEY?: string;
 
