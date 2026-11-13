@@ -88,9 +88,11 @@ async function readCachedRates(kv: KVNamespace): Promise<ExchangeRates | null> {
 }
 
 // Fetch exchange rates from Currency API with KV caching
-export async function fetchExchangeRates(apiKey: string, kv: KVNamespace): Promise<ExchangeRates> {
+export async function fetchExchangeRates(
+  apiKey: string, kv: KVNamespace, options: { forceRefresh?: boolean } = {}
+): Promise<ExchangeRates> {
   try {
-    const cached = await readCachedRates(kv);
+    const cached = options.forceRefresh ? null : await readCachedRates(kv);
     if (cached) {
       console.log('Cache hit for exchange rates');
       return cached;
@@ -108,6 +110,7 @@ export async function fetchExchangeRates(apiKey: string, kv: KVNamespace): Promi
         // Some environments may require a user agent; keep minimal
         'User-Agent': 'HNTelegramBot/1.0',
       },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!resp.ok) {
@@ -130,7 +133,7 @@ export async function fetchExchangeRates(apiKey: string, kv: KVNamespace): Promi
   } catch (error) {
     console.error('Error fetching exchange rates:', error);
     
-    const cached = await readCachedRates(kv);
+    const cached = options.forceRefresh ? null : await readCachedRates(kv);
     if (cached) {
       console.log('Returning validated cached data after fetch error');
       return cached;

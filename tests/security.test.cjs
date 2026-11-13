@@ -85,7 +85,7 @@ test('fails closed when the Worker webhook secret is not configured', async () =
 });
 
 test('ignores all commands from other groups and private chats', async () => {
-  for (const command of ['/flushcache', '/status', '/market', '/calendar', '/btc', '/stocks', '/oil', '/top10hn', '/top10ars', '/exrate', '/eth']) {
+  for (const command of ['/flushcache', '/status', '/brief', '/market', '/calendar', '/btc', '/stocks', '/oil', '/top10hn', '/top10ars', '/exrate', '/eth']) {
     for (const chat of [{ id: groupId - 1, type: 'supergroup' }, { id: 42, type: 'private' }]) {
       assert.equal((await deliver(update(42, command, { chat }))).status, 200);
     }
@@ -161,6 +161,10 @@ test('supports a group command addressed to the bot and propagates sender identi
 });
 
 test('manual trigger requires POST and a valid secret', async () => {
+  mock.method(require('../src/brief.ts'), 'sendBrief', async (environment, force) => {
+    assert.equal(force, true);
+    await require('../src/telegram.ts').sendMessage(environment.TELEGRAM_BOT_TOKEN, environment.TELEGRAM_CHAT_ID, 'brief');
+  });
   assert.equal((await deliver({}, secret, '/trigger', 'GET')).status, 405);
   assert.equal((await deliver({}, null, '/trigger')).status, 403);
   assert.equal(calls.length, 0);
@@ -174,6 +178,10 @@ test('health remains available without credentials', async () => {
 });
 
 test('scheduled digest continues to work without the HTTP secret', async () => {
+  mock.method(require('../src/brief.ts'), 'sendBrief', async (environment, force) => {
+    assert.equal(force, true);
+    await require('../src/telegram.ts').sendMessage(environment.TELEGRAM_BOT_TOKEN, environment.TELEGRAM_CHAT_ID, 'brief');
+  });
   delete env.TELEGRAM_WEBHOOK_SECRET;
   const pending = [];
   await worker.scheduled({}, env, { waitUntil: promise => pending.push(promise) });
@@ -205,6 +213,7 @@ test('setup registers authenticated webhook and exposes flushcache only in the o
     assert.equal(hasFlush, payload.scope.type === 'chat_member' && payload.scope.user_id === 42);
     assert.equal(payload.commands.some(command => command.command === 'status'), hasFlush);
     assert.ok(payload.commands.some(command => command.command === 'market'));
+    assert.ok(payload.commands.some(command => command.command === 'brief'));
     assert.ok(payload.commands.some(command => command.command === 'calendar'));
     assert.ok(!payload.commands.some(command => command.command === 'alert'));
     assert.ok(payload.commands.some(command => command.command === 'top10hn'));

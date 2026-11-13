@@ -6,10 +6,9 @@ import { fetchStockPrices, formatStockPrices } from './stocks';
 import { fetchOilPrices, formatOilPrices } from './oil';
 import { fetchMarketOverview, formatMarketOverview } from './market';
 import { fetchCalendar, formatCalendar } from './calendar';
-import { observe, availability, quoteAvailability, formatStatus } from './monitoring';
+import { observe, quoteAvailability, formatStatus } from './monitoring';
 import { escapeHtml } from './display';
 import {
-  sendDigest,
   sendStoriesRange,
   parseCommand,
   isFlushCacheCommand,
@@ -25,6 +24,9 @@ import { getArsTopStories } from './ars-api';
 import { formatArsArticles } from './formatters';
 import { fetchExchangeRates, formatExchangeRates } from './exrate-api';
 import { fetchAndFormatEthBrief } from './eth-brief';
+import { sendBrief, serveBrief } from './brief';
+import { syncCommandMenus, migrateWebhook } from './command-menu';
+import { probeCryptoSources } from './crypto-probe';
 
 async function flushCache(kv: KVNamespace): Promise<number> {
   let deleted = 0;
@@ -93,13 +95,9 @@ async function fetchTopHNStories(kv: KVNamespace): Promise<ProcessedStory[]> {
 }
 
 async function handleScheduled(env: Env): Promise<void> {
-  console.log('Starting HN Telegram Bot scheduled job');
-  const config = getConfig(env);
-  const processedStories = await observe(env.HN_STORIES, 'hn', () => fetchTopHNStories(env.HN_STORIES),
-    stories => ({ ok: stories.length > 0, detail: `${stories.length} 条结果（可能来自缓存）` }));
-  console.log(`Fetched ${processedStories.length} stories`);
-  await observe(env.HN_STORIES, 'telegram', () => sendDigest(config.telegramBotToken, config.telegramChatId, processedStories, new Date()));
-  console.log('Digest sent successfully');
+  console.log('Starting fresh market brief scheduled job');
+  await observe(env.HN_STORIES, 'telegram', () => sendBrief(env, true));
+  console.log('Fresh market brief sent successfully');
 }
 
 async function handleCommand(
@@ -108,7 +106,8 @@ async function handleCommand(
   chatId: number,
   chatType: string,
   userId?: number,
-  args = ''
+  args = '',
+  requestOrigin?: string
 ): Promise<void> {
   const config = getConfig(env);
   if (!isAllowedGroup(chatId, chatType, config.telegramChatId)) return;
@@ -116,6 +115,11 @@ async function handleCommand(
     observe(env.HN_STORIES, 'telegram', () => sendMessage(config.telegramBotToken, String(chatId), text, options));
 
   try {
+    if (command === '/brief') {
+      await observe(env.HN_STORIES, 'telegram', () => sendBrief(env, false, requestOrigin));
+      return;
+    }
+
     if (isFlushCacheCommand(command) || command === '/status') {
       // Silently ignore unauthorized attempts; do not advertise this hidden command.
       if (userId === undefined) return;
@@ -142,8 +146,8 @@ async function handleCommand(
 
     if (isCryptoCommand(command)) {
       console.log(`Processing crypto command for chat ${chatId}`);
-      const prices = await observe(env.HN_STORIES, 'crypto', fetchCryptoPrices,
-        value => availability(value.length, 10));
+      const prices = await observe(env.HN_STORIES, 'crypto', () => fetchCryptoPrices({ coinGeckoApiKey: env.COINGECKO_API_KEY }),
+        quoteAvailability);
       const message = formatCryptoPrices(prices);
       await reply(message);
       console.log(`Sent ${prices.length} crypto prices`);
@@ -253,6 +257,27 @@ export default {
   ): Promise<Response> {
     try {
       const url = new URL(request.url);
+      const briefResponse = await serveBrief(request, env);
+      if (briefResponse) return briefResponse;
+
+      if (['/admin/commands/sync', '/admin/webhook/migrate', '/admin/crypto/probe', '/admin/brief/refresh'].includes(url.pathname)) {
+        if (request.method !== 'POST') {
+          return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'POST' } });
+        }
+        if (!await hasValidWebhookSecret(request, env.COMMAND_SYNC_TOKEN)) {
+          return new Response('Forbidden', { status: 403 });
+        }
+        if (url.pathname === '/admin/crypto/probe') return Response.json(await probeCryptoSources(env));
+        if (url.pathname === '/admin/brief/refresh') return Response.json({ ok: true, briefUrl: await sendBrief(env, true) });
+        if (url.pathname === '/admin/webhook/migrate') {
+          const result = await migrateWebhook(env);
+          const briefUrl = await sendBrief(env);
+          return Response.json({ ...result, briefSent: true, briefUrl });
+        }
+        const language = url.searchParams.get('language') || '';
+        if (!['', 'en', 'zh'].includes(language)) return new Response('Unsupported language', { status: 400 });
+        return Response.json(await syncCommandMenus(env, language));
+      }
 
       if (url.pathname === '/trigger') {
         if (request.method !== 'POST') {
@@ -283,7 +308,7 @@ export default {
         const parsed = parseCommand(update);
 
         if (parsed?.command) {
-          ctx.waitUntil(handleCommand(env, parsed.command, parsed.chatId, parsed.chatType, parsed.userId, parsed.args));
+          ctx.waitUntil(handleCommand(env, parsed.command, parsed.chatId, parsed.chatType, parsed.userId, parsed.args, url.origin));
         }
 
         return new Response('OK', { status: 200 });

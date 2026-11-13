@@ -1,6 +1,10 @@
 const { readFileSync } = require('node:fs');
 const ts = require('typescript');
 
+require.extensions['.txt'] = (module, filename) => {
+  module.exports = { default: readFileSync(filename, 'utf8') };
+};
+
 // Load the actual Worker modules without Wrangler or local secret files.
 require.extensions['.ts'] = (module, filename) => {
   const { outputText } = ts.transpileModule(readFileSync(filename, 'utf8'), {

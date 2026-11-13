@@ -123,7 +123,7 @@ export async function sendMessage(
   botToken: string,
   chatId: string,
   text: string,
-  options: { disableLinkPreview?: boolean } = {}
+  options: { disableLinkPreview?: boolean; button?: { text: string; url: string } } = {}
 ): Promise<void> {
   const url = `${TELEGRAM_API_BASE}${botToken}/sendMessage`;
 
@@ -132,6 +132,7 @@ export async function sendMessage(
     text: text,
     parse_mode: text.includes('<') ? 'HTML' : 'Markdown',
     link_preview_options: { is_disabled: options.disableLinkPreview ?? false },
+    ...(options.button ? { reply_markup: { inline_keyboard: [[options.button]] } } : {}),
   };
 
   try {

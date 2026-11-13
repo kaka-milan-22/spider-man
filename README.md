@@ -1,7 +1,7 @@
 # Spider-Man Telegram Bot
 
 A TypeScript Cloudflare Worker for group news, market quotes and economic calendars.
-It sends a Hacker News digest daily at **10:30 UTC+8**; all other features are requested through Telegram commands.
+It sends a fresh market brief daily at **11:00 UTC+8**. `/brief` reuses the latest report for 24 hours; individual queries remain available.
 
 [English](README.md) · [简体中文](i18n/README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
@@ -11,9 +11,10 @@ Public commands work for every member of the configured group. Commands from oth
 
 | Command | Result | Application cache |
 | --- | --- | --- |
+| `/brief` | Mobile market brief; scheduled refresh bypasses cache | 24 hours |
 | `/top10hn` | Top 10 valid stories in the order supplied by Hacker News | 2 hours |
 | `/top10ars` | Latest 10 Ars Technica RSS articles, with excerpts and dates | 2 hours |
-| `/btc` | Coinbase USD quotes and 24-hour changes; unavailable pairs are omitted | None |
+| `/btc` | CoinGecko USD batch quotes with Coinbase fallback; unavailable pairs remain visible | None |
 | `/stocks` | Nine US-listed stocks and one gold ETF, with daily changes | None |
 | `/oil` | Brent/WTI Futures and Metro Manila gasoline/Diesel reference prices | None |
 | `/market` | S&P 500, Nasdaq Composite, DXY, US 10Y Treasury yield and VIX | None |
@@ -24,8 +25,20 @@ Public commands work for every member of the configured group. Commands from oth
 | `/status` | Recent source results, request duration, last success and live Webhook status | Owner only |
 | `/flushcache` | Clear every key in the bound KV namespace, including status records | Owner only |
 
-`/btc` requests BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX, UNI and AAVE; upstream availability determines which pairs appear.
+`/btc` requests BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX, UNI and AAVE. CoinGecko queries all coins in one batch and retries only missing/stale results once; Coinbase fetches only unresolved pairs, with at most four concurrent requests and pacing between chunks. The combined per-coin budget is three attempts across both sources, with a 4-second request timeout. Responses honor Retry-After; long rate-limit windows stop retries. Primary quotes older than five minutes are rejected. A missing 24-hour change never discards a valid price; no previous prices are reused.
 `/alert` is not implemented, and there is no background market polling.
+
+Configure `COINGECKO_API_KEY` for production: anonymous CoinGecko calls can be rate-limited on shared Worker egress. The key is sent only in the `x-cg-demo-api-key` header. The Crypto section footer identifies the data sources; Coinbase exchange USD prices can differ from CoinGecko aggregate prices.
+
+## Market brief
+
+The report contains market overview, Crypto, stocks/gold, USD rates, oil/Philippine fuel and the next seven days of economic events, in that order. It uses the approved dark mobile layout with large navigation buttons, green/red changes and currency flags. Stock and Crypto logos are cached project assets embedded in the page.
+
+Crypto and stocks share the same three-column table layout: asset, USD price and change. Timestamps appear below the symbol in muted text, without a “报价时间：” prefix or a separate full-width row. Crypto uses the source timestamp when available, otherwise the report generation time; the report header states UTC+8 once. Crypto changes cover 24 hours; stock changes are relative to the previous session's close.
+
+At 11:00 UTC+8 the scheduled job requests fresh upstream data, bypassing both report and currency caches, and replaces the 24-hour report cache. `/brief` reads the cache; only a miss or expiry generates a report. Each immutable link expires 24 hours after generation. Opening a page never fetches upstream data or sends messages. Partial source failures are marked explicitly; old data is not substituted.
+
+Set `BRIEF_BASE_URL` to the current Worker HTTPS origin. Random report links open without login; anyone with a link can view it. KV is eventually consistent, so concurrent first requests in different regions can generate duplicate reports; overlapping requests within an isolate are coalesced. Flushing KV invalidates report links too.
 
 ## Quotes and display
 
@@ -109,7 +122,7 @@ KV can lag under concurrent use. Cache-based results are labelled: a cache hit i
 | --- | --- |
 | `GET /health` | Public health response |
 | `POST /webhook` | Requires `X-Telegram-Bot-Api-Secret-Token` |
-| `POST /trigger` | Same secret; sends the HN digest to the configured group |
+| `POST /trigger` | Same secret; forces a fresh market brief and sends it to the configured group |
 
 An absent or incorrect secret rejects the protected HTTP request. Cron runs internally without this header.
 Version preview URLs are disabled with `preview_urls = false` so older versions cannot provide an alternative unprotected entry point.
@@ -170,16 +183,18 @@ Production smoke checks can start with `/health`, followed by the relevant comma
 | `TELEGRAM_BOT_TOKEN` | Worker Secret and setup-process environment variable |
 | `TELEGRAM_CHAT_ID` | Numeric allowed group ID, stored as a Worker Secret and supplied to setup |
 | `TELEGRAM_WEBHOOK_SECRET` | Shared secret for Webhook and manual trigger authentication |
+| `COINGECKO_API_KEY` | CoinGecko Demo API key stored as a Worker Secret; never embedded in code or pages |
 | `CURRENCY_API_KEY` | currencyapi.com key required for `/exrate` |
 | `TELEGRAM_WEBHOOK_URL` | Setup-only URL; required when no Webhook exists |
 | `TELEGRAM_COMMAND_LANGUAGES` | Setup-only additional menu languages |
-| `HN_TOP_N` | Retained configuration value; current digest and HN command fetch the top 10 |
+| `BRIEF_BASE_URL` | HTTPS origin for report links sent by scheduled jobs |
+| `HN_TOP_N` | Retained configuration value; the HN command fetches the top 10 |
 
-The only cron remains the daily HN digest:
+The daily cron now generates the market brief (replacing the old HN digest):
 
 ```toml
 [triggers]
-crons = ["30 2 * * *"] # 10:30 UTC+8
+crons = ["0 3 * * *"] # 11:00 UTC+8
 ```
 
 ### Local commands
@@ -197,13 +212,17 @@ npm run telegram:setup  # Configure Webhook and command menus
 `npm run trigger` is an alias for scheduled local development; it does not invoke production.
 `sync.sh` validates and deploys, and `deploy.sh` installs dependencies, validates and deploys. Neither runs menu setup automatically because it requires the setup-process credentials.
 
+Menu-only maintenance can also use `POST /admin/commands/sync?language=zh` (languages: empty, `en`, `zh`) with a temporary `COMMAND_SYNC_TOKEN` in `X-Telegram-Bot-Api-Secret-Token`. It updates and verifies group, administrator and owner menus without changing the Webhook. Remove the temporary Secret after use; the endpoint rejects requests when it is absent.
+
+Production uses `https://econ.kakacn.com` with the custom domain recorded in `wrangler.toml`. Report links and the Telegram Webhook use this origin; `workers_dev = false` and `preview_urls = false` keep the default and preview entry points disabled. During a future migration, the temporary-token-protected `POST /admin/webhook/migrate` preserves the shared Webhook Secret and pending updates, verifies the new URL, and sends a report to the group before the old route is disabled.
+
 ## Data sources and code
 
 | Feature | Source | Main module |
 | --- | --- | --- |
 | Hacker News | Firebase HN API; retains supplied ranking order | `src/hn-api.ts` |
 | Ars Technica | Ars Technica RSS | `src/ars-api.ts` |
-| Crypto quotes | Coinbase Exchange product stats | `src/crypto.ts` |
+| Crypto quotes | CoinGecko simple/price + Coinbase Exchange fallback | `src/crypto.ts` |
 | Stocks, oil Futures, market indices | Yahoo Finance chart API | `src/yahoo-finance.ts`, `stocks.ts`, `oil.ts`, `market.ts` |
 | Philippine fuel | GasWatch PH published Metro Manila averages | `src/oil.ts` |
 | ETH brief | Coinbase prices, optional CoinGecko market caps, DeFiLlama | `src/eth-brief.ts` |
@@ -225,7 +244,7 @@ npm run telegram:setup  # Configure Webhook and command menus
 
 **`/exrate` error:** confirm `CURRENCY_API_KEY`. The parser supports both flat and nested historical KV schemas and rejects missing/non-numeric rates before formatting.
 
-**No daily digest:** inspect cron and Telegram delivery logs. `POST /trigger` with the shared secret triggers a real group digest; local scheduled testing does not verify production delivery.
+**No daily digest:** inspect cron and Telegram delivery logs. `POST /trigger` with the shared secret generates and sends a real fresh market brief; local scheduled testing does not verify production delivery.
 
 ## License
 

@@ -52,6 +52,7 @@ export interface TelegramMessagePayload {
   text: string;
   parse_mode?: 'Markdown' | 'MarkdownV2' | 'HTML';
   link_preview_options?: { is_disabled?: boolean };
+  reply_markup?: { inline_keyboard: Array<Array<{ text: string; url: string }>> };
 }
 
 export interface TelegramResponse {
@@ -110,11 +111,15 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_CHAT_ID: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
+  // Short-lived credential for authenticated maintenance, removed after use.
+  COMMAND_SYNC_TOKEN?: string;
   // Currency API (optional)
   CURRENCY_API_KEY?: string;
+  COINGECKO_API_KEY?: string;
 
   // Config
   HN_TOP_N?: string;
+  BRIEF_BASE_URL?: string;
 }
 
 /**

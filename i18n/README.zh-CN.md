@@ -1,7 +1,7 @@
 # Spider-Man Telegram Bot
 
 基于 TypeScript 和 Cloudflare Worker 的 Telegram 群组助手，提供新闻、行情、经济日程和运行状态。
-每天 **10:30 UTC+8** 推送 Hacker News digest；其余功能通过命令按需查询。
+每天 **11:00 UTC+8** 抓取最新数据并推送市场简报；`/brief` 复用最近 24 小时内的简报。单项查询命令继续可用。
 
 [English](../README.md) · [简体中文](README.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
@@ -11,9 +11,10 @@
 
 | 命令 | 内容 | 应用缓存 |
 | --- | --- | --- |
+| `/brief` | 手机网页市场简报；自动推送强制刷新，手动调用复用缓存 | 24 小时 |
 | `/top10hn` | 按 Hacker News API 原始顺序返回 10 条有效文章 | 2 小时 |
 | `/top10ars` | Ars Technica RSS 最新 10 篇文章，含摘要和时间 | 2 小时 |
-| `/btc` | Coinbase 的 USD 报价与 24 小时涨跌；不可用交易对会省略 | 无 |
+| `/btc` | CoinGecko 批量 USD 报价与 24 小时涨跌，Coinbase 备用；失败显示“暂无报价” | 无 |
 | `/stocks` | 10 个美股 / 黄金 ETF 的价格和日涨跌 | 无 |
 | `/oil` | Brent/WTI Futures 与 Metro Manila 汽油 / Diesel 参考价 | 无 |
 | `/market` | S&P 500、Nasdaq Composite、DXY、US 10Y Treasury yield、VIX | 无 |
@@ -24,8 +25,20 @@
 | `/status` | 最近调用结果、耗时、成功时间和实时 Webhook 状态 | 仅 owner |
 | `/flushcache` | 清除绑定 KV namespace 的所有 key，包括状态记录 | 仅 owner |
 
-`/btc` 请求 BTC、ETH、BNB、SOL、TON、DOT、LINK、AVAX、UNI、AAVE；实际返回取决于上游交易对是否可用。
+`/btc` 请求 BTC、ETH、BNB、SOL、TON、DOT、LINK、AVAX、UNI、AAVE。CoinGecko 一次批量查询，仅对缺失或过期币种补查一次；Coinbase 仅补查剩余币种，最多 4 个并发，分批错峰。两个来源合计每个币种最多尝试 3 次，每次 timeout 为 4 秒；遵守 Retry-After，长限流窗口内不继续重试。拒绝超过 5 分钟的 CoinGecko 报价。缺少 24h 涨跌时保留有效价格，不使用旧价格兜底。
 当前没有 `/alert`，也没有后台行情轮询。
+
+CoinGecko 匿名接口在 Worker 的共享出口可能返回 429，生产建议设置 `COINGECKO_API_KEY`。Key 仅通过 `x-cg-demo-api-key` header 发给 CoinGecko。Crypto 板块底部统一说明数据源，Coinbase 为独立交易所 USD 报价，可能与聚合报价略有差异。
+
+## 市场简报
+
+页面顺序：市场概览、Crypto、股票与黄金、USD 汇率、原油及菲律宾油价、未来 7 天经济日程。深色手机布局，导航按钮高 48px，涨绿跌红；汇率逐行显示并包含国旗。股票与 Crypto Logo 缓存在项目并内嵌，不向外部图片服务发请求。
+
+Crypto 与 stocks 统一使用三列表格：资产、USD 价格、涨跌幅。时间以灰色小字显示在 Symbol 下方，不加“报价时间：”前缀，也不单独占用整行；Crypto 优先显示源时间，缺失时显示简报生成时间。UTC+8 统一在页面顶部注明，Crypto 涨跌幅为 24h，stocks 相对前一交易日收盘价。
+
+每天 11:00 UTC+8 自动任务跳过简报缓存与汇率缓存，重新请求全部数据源，然后将新简报缓存 24 小时。`/brief` 缓存命中不请求上游；不存在或过期才生成。每次生成独立链接，24 小时后过期；访问网页仅展示已有快照，不触发生成或发群。部分来源失败时保留其他板块并标注缺失，不使用旧数据冒充新数据。
+
+`BRIEF_BASE_URL` 设置为当前 Worker 的 HTTPS origin。网页凭随机链接访问，无需登录；不要公开转发链接。KV 是 eventual consistency：跨区域并发的首次请求可能重复生成，同一 isolate 内会合并并发请求。清空 KV 同时会让简报链接失效。
 
 ## 行情与布局
 
@@ -109,7 +122,7 @@ KV 在并发时可能稍有延迟。缓存命中的命令会注明，不能据�
 | --- | --- |
 | `GET /health` | 公开 health response |
 | `POST /webhook` | 必须携带 `X-Telegram-Bot-Api-Secret-Token` |
-| `POST /trigger` | 使用相同 Secret；会向目标群发送 HN digest |
+| `POST /trigger` | 使用相同 Secret；强制生成最新市场简报并发到目标群 |
 
 Secret 缺失或错误时拒绝受保护的 HTTP 请求。Cron 在内部执行，不使用该 header。
 配置保留 `preview_urls = false`，避免旧版本通过 version preview URL 提供额外入口。
@@ -170,16 +183,18 @@ npm run telegram:setup
 | `TELEGRAM_BOT_TOKEN` | Worker Secret，同时注入设置脚本环境 |
 | `TELEGRAM_CHAT_ID` | 允许的数字 group ID，保存为 Worker Secret，同时提供给设置脚本 |
 | `TELEGRAM_WEBHOOK_SECRET` | Webhook 和手动触发接口的 shared secret |
+| `COINGECKO_API_KEY` | CoinGecko Demo API key，作为 Worker Secret 保存；不进入源码或页面 |
 | `CURRENCY_API_KEY` | `/exrate` 所需的 currencyapi.com key |
 | `TELEGRAM_WEBHOOK_URL` | 仅设置脚本使用；没有现有 Webhook 时必需 |
 | `TELEGRAM_COMMAND_LANGUAGES` | 仅设置脚本使用；额外菜单语言 |
-| `HN_TOP_N` | 保留配置项；当前 digest 和 HN 命令固定取 Top 10 |
+| `BRIEF_BASE_URL` | 简报网页的 HTTPS origin，供定时任务构造按钮链接 |
+| `HN_TOP_N` | 保留配置项；HN 命令固定取 Top 10 |
 
-唯一 cron 仍是每天的 HN digest：
+每日 cron 改为市场简报，替代旧的 HN digest：
 
 ```toml
 [triggers]
-crons = ["30 2 * * *"] # 10:30 UTC+8
+crons = ["0 3 * * *"] # 11:00 UTC+8
 ```
 
 ### 本地命令
@@ -197,13 +212,17 @@ npm run telegram:setup  # 更新 Webhook 和命令菜单
 `npm run trigger` 是本地 scheduled development 的别名，不会触发 production。
 `sync.sh` 验证后部署；`deploy.sh` 安装依赖、验证后部署。两者均不自动运行菜单设置，因为设置脚本需要独立注入凭据。
 
+仅维护菜单时，也可通过 `POST /admin/commands/sync?language=zh`（支持空值、`en`、`zh`），在 `X-Telegram-Bot-Api-Secret-Token` header 使用临时 `COMMAND_SYNC_TOKEN`。接口同步并读回验证目标群、管理员和 owner 的菜单，不修改 Webhook。完成后删除该临时 Secret；Secret 不存在时接口拒绝请求。
+
+生产域名为 `https://econ.kakacn.com`，Custom Domain 已写入 `wrangler.toml`。简报链接与 Telegram Webhook 使用该域名；`workers_dev = false` 和 `preview_urls = false` 关闭默认入口与 preview 入口。后续迁移可用临时 Token 保护的 `POST /admin/webhook/migrate`：保留 Webhook Secret 与待处理消息，读回确认新 URL，并向群里发送简报，验证后再关闭旧入口。
+
 ## 数据源与代码
 
 | 功能 | 来源 | 主要模块 |
 | --- | --- | --- |
 | Hacker News | Firebase HN API，保留 API 给出的排名顺序 | `src/hn-api.ts` |
 | Ars Technica | Ars Technica RSS | `src/ars-api.ts` |
-| Crypto 报价 | Coinbase Exchange product stats | `src/crypto.ts` |
+| Crypto 报价 | CoinGecko simple/price + Coinbase Exchange 备用 | `src/crypto.ts` |
 | 股票、原油 Futures、市场指数 | Yahoo Finance chart API | `src/yahoo-finance.ts`、`stocks.ts`、`oil.ts`、`market.ts` |
 | 菲律宾油价 | GasWatch PH 发布的 Metro Manila 均价 | `src/oil.ts` |
 | ETH brief | Coinbase 价格、可选 CoinGecko market cap、DeFiLlama | `src/eth-brief.ts` |
@@ -225,7 +244,7 @@ npm run telegram:setup  # 更新 Webhook 和命令菜单
 
 **`/exrate` 报错：** 确认 `CURRENCY_API_KEY`。解析器兼容历史 flat 与 nested KV 格式，并在格式化前拒绝缺失或无效汇率。
 
-**没有每日推送：** 检查 cron 和 Telegram 发送日志。携带 shared secret 请求 `POST /trigger` 会发送真实群消息；本地 scheduled 测试不能证明 production 已正常投递。
+**没有每日推送：** 检查 cron 和 Telegram 发送日志。携带 shared secret 请求 `POST /trigger` 会生成最新市场简报并发送真实群消息；本地 scheduled 测试不能证明 production 已正常投递。
 
 ## 许可证
 

@@ -17,6 +17,7 @@ dist/
 
 # Cloudflare
 .wrangler/
+.playwright-cli/
 
 # IDE
 .vscode/
