@@ -4,9 +4,9 @@ compatibility_date = "2024-01-01"
 compatibility_flags = ["cache_option_enabled"]
 preview_urls = false
 
-# Fresh market brief daily at 11:00 UTC+8 (03:00 UTC)
+# HN digest at 10:30 UTC+8; fresh market brief at 11:00 UTC+8
 [triggers]
-crons = ["0 3 * * *"]
+crons = ["30 2 * * *", "0 3 * * *"]
 
 # KV namespace for cached results and status metadata
 [[kv_namespaces]]

@@ -1,7 +1,7 @@
 # Spider-Man Telegram Bot
 
 A TypeScript Cloudflare Worker for group news, market quotes and economic calendars.
-It sends a fresh market brief daily at **11:00 UTC+8**. `/brief` reuses the latest report for 24 hours; individual queries remain available.
+It sends a Hacker News digest daily at **10:30 UTC+8** and a fresh market brief at **11:00 UTC+8**. `/brief` reuses the latest report for 24 hours; individual queries remain available.
 
 [English](README.md) · [简体中文](i18n/README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
@@ -11,7 +11,7 @@ Public commands work for every member of the configured group. Commands from oth
 
 | Command | Result | Application cache |
 | --- | --- | --- |
-| `/brief` | Mobile market brief; scheduled refresh bypasses cache | 24 hours |
+| `/brief` | Mobile market brief; scheduled refresh bypasses cache | Latest: 24 hours; history: 7 days |
 | `/top10hn` | Top 10 valid stories in the order supplied by Hacker News | 2 hours |
 | `/top10ars` | Latest 10 Ars Technica RSS articles, with excerpts and dates | 2 hours |
 | `/btc` | CoinGecko USD batch quotes with Coinbase fallback; unavailable pairs remain visible | None |
@@ -36,7 +36,7 @@ The report contains market overview, Crypto, stocks/gold, USD rates, oil/Philipp
 
 Crypto and stocks share the same three-column table layout: asset, USD price and change. Timestamps appear below the symbol in muted text, without a “报价时间：” prefix or a separate full-width row. Crypto uses the source timestamp when available, otherwise the report generation time; the report header states UTC+8 once. Crypto changes cover 24 hours; stock changes are relative to the previous session's close.
 
-At 11:00 UTC+8 the scheduled job requests fresh upstream data, bypassing both report and currency caches, and replaces the 24-hour report cache. `/brief` reads the cache; only a miss or expiry generates a report. Each immutable link expires 24 hours after generation. Opening a page never fetches upstream data or sends messages. Partial source failures are marked explicitly; old data is not substituted.
+At 11:00 UTC+8 the scheduled job requests fresh upstream data, bypassing both report and currency caches, and replaces the 24-hour report cache. `/brief` reads the cache; only a miss or expiry generates a report. Each immutable historical report is retained for 7 days; the latest-report cache still expires after 24 hours. Opening a page never fetches upstream data or sends messages. Partial source failures are marked explicitly; old data is not substituted.
 
 Set `BRIEF_BASE_URL` to the current Worker HTTPS origin. Random report links open without login; anyone with a link can view it. KV is eventually consistent, so concurrent first requests in different regions can generate duplicate reports; overlapping requests within an isolate are coalesced. Flushing KV invalidates report links too.
 
@@ -190,11 +190,13 @@ Production smoke checks can start with `/health`, followed by the relevant comma
 | `BRIEF_BASE_URL` | HTTPS origin for report links sent by scheduled jobs |
 | `HN_TOP_N` | Retained configuration value; the HN command fetches the top 10 |
 
-The daily cron now generates the market brief (replacing the old HN digest):
+Separate daily cron triggers preserve the HN digest at 10:30 UTC+8 and generate the market brief at 11:00 UTC+8:
+
+Cloudflare cron expressions use UTC. The Worker dispatches each expression to its own handler; both entries are required.
 
 ```toml
 [triggers]
-crons = ["0 3 * * *"] # 11:00 UTC+8
+crons = ["30 2 * * *", "0 3 * * *"] # 10:30 and 11:00 UTC+8
 ```
 
 ### Local commands
@@ -209,7 +211,7 @@ npm run deploy          # Deploy Worker code and configured cron
 npm run telegram:setup  # Configure Webhook and command menus
 ```
 
-`npm run trigger` is an alias for scheduled local development; it does not invoke production.
+`npm run trigger` is an alias for scheduled local development; it does not invoke production. Test each handler via `/__scheduled?cron=30+2+*+*+*` (HN) or `/__scheduled?cron=0+3+*+*+*` (market brief).
 `sync.sh` validates and deploys, and `deploy.sh` installs dependencies, validates and deploys. Neither runs menu setup automatically because it requires the setup-process credentials.
 
 Menu-only maintenance can also use `POST /admin/commands/sync?language=zh` (languages: empty, `en`, `zh`) with a temporary `COMMAND_SYNC_TOKEN` in `X-Telegram-Bot-Api-Secret-Token`. It updates and verifies group, administrator and owner menus without changing the Webhook. Remove the temporary Secret after use; the endpoint rejects requests when it is absent.
@@ -244,7 +246,9 @@ Production uses `https://econ.kakacn.com` with the custom domain recorded in `wr
 
 **`/exrate` error:** confirm `CURRENCY_API_KEY`. The parser supports both flat and nested historical KV schemas and rejects missing/non-numeric rates before formatting.
 
-**No daily digest:** inspect cron and Telegram delivery logs. `POST /trigger` with the shared secret generates and sends a real fresh market brief; local scheduled testing does not verify production delivery.
+**No daily digest:** confirm both production cron entries: `30 2 * * *` for HN at 10:30 UTC+8 and `0 3 * * *` for the market brief at 11:00 UTC+8. Inspect cron and Telegram delivery logs. `POST /trigger` with the shared secret sends a fresh market brief; it does not run the HN digest. Local scheduled testing does not verify production delivery.
+
+**Historical brief unavailable:** use the button in the original Telegram message to view its snapshot for up to 7 days from generation. `/brief` returns the latest report, rather than a history index. Expired or deleted snapshots return HTTP 410; requesting a new brief does not restore them. `/flushcache` deletes historical reports too.
 
 ## License
 

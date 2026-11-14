@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-14]
+
+### Fixed
+
+- Restore the daily Hacker News digest at 10:30 UTC+8 alongside the market brief at 11:00 UTC+8. Each cron expression runs its own handler.
+- Retain historical market brief snapshots and their original Telegram links for 7 days, while keeping the latest-report cache at 24 hours.
+- Cover both scheduled handlers, unsupported cron expressions and report freshness/retention boundaries with offline regression tests.
+- Align English and Chinese documentation with both schedules, historical links and manual-trigger behavior.
+
 ## [2026-10-18]
 
 ### Added

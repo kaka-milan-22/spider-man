@@ -14,6 +14,7 @@ import { STOCK_LOGOS } from './stock-logos';
 import { CRYPTO_LOGOS } from './crypto-logos';
 
 export const BRIEF_TTL = 86400;
+export const BRIEF_RETENTION_TTL = 7 * 86400;
 export const BRIEF_LATEST_KEY = 'brief:v1:latest';
 export const BRIEF_REPORT_PREFIX = 'brief:v1:report:';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -117,7 +118,7 @@ export function renderBrief(data: BriefData, generatedAt: number): string {
 <header><div class="brand">Spider-Man</div><h1>每日市场简报</h1><p class="meta">${timestamp.replace(/-/g, '.').replace(' ', ' · ')} UTC+8</p><div class="direction-key"><span class="up"><i aria-hidden="true"></i>上涨 +</span><span class="down"><i aria-hidden="true"></i>下跌 −</span></div><p class="intro">市场、关注资产与经济日程，一页看完。</p><p class="footnote">这是生成时的数据快照，价格与日程不会随页面刷新更新。具体报价时间以各数据源标注为准。</p></header>
 <nav aria-label="简报板块">${SECTIONS.map(([id, title], i) => `<a href="#${id}"${i === 0 ? ' aria-current="location"' : ''}>${title}</a>`).join('')}</nav>
 ${SECTIONS.map(([id, title, command]) => section(id, title, command, notes[id], bodies[id])).join('\n')}
-<footer><p>Spider-Man 每日市场简报 · 生成于 ${timestamp}</p><p>每日 11:00 更新；/brief 使用 24 小时内缓存。链接自生成起有效 24 小时，过期后可在群内发送 /brief 获取。</p><a class="back" href="#top">返回顶部 ↑</a></footer></main><script src="/brief-nav.js" defer></script></body></html>`;
+<footer><p>Spider-Man 每日市场简报 · 生成于 ${timestamp}</p><p>每日 11:00 更新；/brief 使用 24 小时内缓存。历史简报自生成起保留 7 天，群消息中的原链接可查看当时的快照。</p><a class="back" href="#top">返回顶部 ↑</a></footer></main><script src="/brief-nav.js" defer></script></body></html>`;
 }
 
 function incomplete(data: BriefData): string[] {
@@ -150,7 +151,7 @@ async function fetchData(env: Env): Promise<BriefData> {
 function validReport(value: unknown, now: number): value is BriefReport {
   const r = value as BriefReport | null;
   return !!r && r.version === 1 && typeof r.id === 'string' && UUID.test(r.id)
-    && Number.isFinite(r.generatedAt) && r.generatedAt <= now && now - r.generatedAt < BRIEF_TTL * 1000
+    && Number.isFinite(r.generatedAt) && r.generatedAt <= now && now - r.generatedAt < BRIEF_RETENTION_TTL * 1000
     && typeof r.html === 'string' && typeof r.summary === 'string';
 }
 
@@ -171,11 +172,11 @@ async function generateBrief(env: Env): Promise<BriefReport> {
     data.exrate ? `1 USD = ${number(data.exrate.PHP)} PHP / ${number(data.exrate.CNY)} CNY` : 'USD 汇率：暂无',
     '', '市场概览 · Crypto · 股票与黄金', 'USD 汇率 · 原油与油价 · 经济日程',
     ...(missingSections.length ? ['', `⚠️ 部分数据缺失：${missingSections.join('、')}`] : []),
-    '', '点击下方按钮查看完整简报。', '链接自生成起有效 24 小时。',
+    '', '点击下方按钮查看完整简报。', '历史简报保留 7 天，原链接可查看当时的快照。',
   ].join('\n');
   const report: BriefReport = { version: 1, id: crypto.randomUUID(), generatedAt, html: renderBrief(data, generatedAt), summary };
   // Keep immutable snapshots so previous Telegram buttons never open a different report.
-  await env.HN_STORIES.put(BRIEF_REPORT_PREFIX + report.id, JSON.stringify(report), { expirationTtl: BRIEF_TTL });
+  await env.HN_STORIES.put(BRIEF_REPORT_PREFIX + report.id, JSON.stringify(report), { expirationTtl: BRIEF_RETENTION_TTL });
   await env.HN_STORIES.put(BRIEF_LATEST_KEY, report.id, { expirationTtl: BRIEF_TTL });
   return report;
 }
@@ -187,7 +188,7 @@ export async function getBrief(env: Env, forceRefresh = false): Promise<BriefRep
   const id = await env.HN_STORIES.get(BRIEF_LATEST_KEY);
   if (id) {
     const cached = await readBrief(env.HN_STORIES, id);
-    if (cached) return cached;
+    if (cached && Date.now() - cached.generatedAt < BRIEF_TTL * 1000) return cached;
   }
   const pending = inFlight.get(env.HN_STORIES);
   if (pending) return pending;

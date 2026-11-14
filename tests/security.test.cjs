@@ -184,7 +184,7 @@ test('scheduled digest continues to work without the HTTP secret', async () => {
   });
   delete env.TELEGRAM_WEBHOOK_SECRET;
   const pending = [];
-  await worker.scheduled({}, env, { waitUntil: promise => pending.push(promise) });
+  await worker.scheduled({ cron: '0 3 * * *' }, env, { waitUntil: promise => pending.push(promise) });
   await Promise.all(pending);
   assert.deepEqual(calls.map(call => call.method), ['sendMessage']);
   assert.equal(calls[0].payload.chat_id, String(groupId));

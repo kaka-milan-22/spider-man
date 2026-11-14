@@ -9,6 +9,7 @@ import { fetchCalendar, formatCalendar } from './calendar';
 import { observe, quoteAvailability, formatStatus } from './monitoring';
 import { escapeHtml } from './display';
 import {
+  sendDigest,
   sendStoriesRange,
   parseCommand,
   isFlushCacheCommand,
@@ -98,6 +99,16 @@ async function handleScheduled(env: Env): Promise<void> {
   console.log('Starting fresh market brief scheduled job');
   await observe(env.HN_STORIES, 'telegram', () => sendBrief(env, true));
   console.log('Fresh market brief sent successfully');
+}
+
+async function handleHNDigest(env: Env): Promise<void> {
+  console.log('Starting HN Telegram Bot scheduled job');
+  const config = getConfig(env);
+  const stories = await observe(env.HN_STORIES, 'hn', () => fetchTopHNStories(env.HN_STORIES),
+    value => ({ ok: value.length > 0, detail: `${value.length} 条结果（可能来自缓存）` }));
+  await observe(env.HN_STORIES, 'telegram', () =>
+    sendDigest(config.telegramBotToken, config.telegramChatId, stories, new Date()));
+  console.log('HN digest sent successfully');
 }
 
 async function handleCommand(
@@ -247,7 +258,16 @@ export default {
     env: Env,
     ctx: ExecutionContext
   ): Promise<void> {
-    ctx.waitUntil(handleScheduled(env));
+    switch (controller.cron) {
+      case '30 2 * * *':
+        ctx.waitUntil(handleHNDigest(env));
+        break;
+      case '0 3 * * *':
+        ctx.waitUntil(handleScheduled(env));
+        break;
+      default:
+        throw new Error(`Unsupported scheduled cron: ${controller.cron}`);
+    }
   },
 
   async fetch(

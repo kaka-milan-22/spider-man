@@ -8,9 +8,9 @@ preview_urls = false
 workers_dev = false
 routes = [{ pattern = "econ.kakacn.com", custom_domain = true, zone_id = "e71ccfa0fc71237015c3e1452229d279" }]
 
-# Fresh market brief daily at 11:00 UTC+8 (03:00 UTC)
+# HN digest at 10:30 UTC+8; fresh market brief at 11:00 UTC+8
 [triggers]
-crons = ["0 3 * * *"]
+crons = ["30 2 * * *", "0 3 * * *"]
 
 # KV namespace for cached results and status metadata
 # Replace with your actual KV namespace ID after creation

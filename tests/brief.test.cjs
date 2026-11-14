@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test, afterEach, mock } = require('node:test');
 require('./register-typescript.cjs');
-const { getBrief, readBrief, renderBrief, BRIEF_TTL, BRIEF_LATEST_KEY, BRIEF_REPORT_PREFIX } = require('../src/brief.ts');
+const { getBrief, readBrief, renderBrief, BRIEF_TTL, BRIEF_RETENTION_TTL, BRIEF_LATEST_KEY, BRIEF_REPORT_PREFIX } = require('../src/brief.ts');
 const { fetchExchangeRates } = require('../src/exrate-api.ts');
 const worker = require('../src/index.ts').default;
 
@@ -61,24 +61,36 @@ test('manual generation caches one immutable report for 24 hours and subsequent 
   assert.equal(cached.html, first.html);
   assert.equal(s.requests.length, calls);
   assert.ok(calls > 20);
-  assert.ok(s.writes.filter(w => w.key.startsWith('brief:')).every(w => w.options.expirationTtl === 86400));
+  assert.ok(s.writes.filter(w => w.key.startsWith(BRIEF_REPORT_PREFIX)).every(w => w.options.expirationTtl === 7 * 86400));
+  assert.ok(s.writes.filter(w => w.key === BRIEF_LATEST_KEY).every(w => w.options.expirationTtl === 86400));
   assert.equal(s.records.get(BRIEF_LATEST_KEY), first.id);
   assert.match(first.html, /部分|不完整/);
 });
 
-test('exactly 24 hours expires the cache even if KV has not deleted it yet', async () => {
+test('24 hours refreshes the latest cache while historical links remain readable for 7 days', async () => {
   const s = setup();
   let now = Date.now();
   mock.method(Date, 'now', () => now);
   const first = await getBrief(s.env);
   const calls = s.requests.length;
   now += BRIEF_TTL * 1000;
-  assert.equal(await readBrief(s.env.HN_STORIES, first.id), null);
+  assert.equal((await readBrief(s.env.HN_STORIES, first.id)).html, first.html);
   s.next();
   const fresh = await getBrief(s.env);
   assert.notEqual(fresh.id, first.id);
   assert.ok(s.requests.length > calls);
   assert.equal(fresh.generatedAt, now);
+  const callsAfterRefresh = s.requests.length;
+  const page = await worker.fetch(new Request(`https://worker.example/brief/${first.id}`), s.env, {});
+  assert.equal(page.status, 200);
+  assert.equal(await page.text(), first.html);
+  assert.equal(s.requests.length, callsAfterRefresh);
+  assert.equal(s.messages.length, 0);
+  now = first.generatedAt + BRIEF_RETENTION_TTL * 1000 - 1;
+  assert.ok(await readBrief(s.env.HN_STORIES, first.id));
+  now++;
+  assert.equal(await readBrief(s.env.HN_STORIES, first.id), null);
+  assert.equal((await worker.fetch(new Request(`https://worker.example/brief/${first.id}`), s.env, {})).status, 410);
 });
 
 test('scheduled execution forces fresh data, bypasses currency cache and updates manual cache', async () => {
@@ -88,7 +100,7 @@ test('scheduled execution forces fresh data, bypasses currency cache and updates
   assert.ok(s.records.has('exrate:latest'));
   s.next();
   const pending = [];
-  await worker.scheduled({}, s.env, { waitUntil: promise => pending.push(promise) });
+  await worker.scheduled({ cron: '0 3 * * *' }, s.env, { waitUntil: promise => pending.push(promise) });
   await Promise.all(pending);
   assert.ok(s.requests.length > oldCalls);
   assert.equal(s.requests.filter(url => new URL(url).hostname === 'api.currencyapi.com').length, 2);
@@ -99,6 +111,35 @@ test('scheduled execution forces fresh data, bypasses currency cache and updates
   assert.equal(s.messages.length, 1);
   assert.equal(s.messages[0].chat_id, s.env.TELEGRAM_CHAT_ID);
   assert.equal(s.messages[0].reply_markup.inline_keyboard[0][0].url, `https://worker.example/brief/${fresh.id}`);
+});
+
+test('10:30 HN cron sends news to the configured group without generating a market brief', async () => {
+  const s = setup();
+  delete s.env.TELEGRAM_WEBHOOK_SECRET;
+  const stories = mock.method(require('../src/hn-api.ts'), 'getStoriesByRange', async (start, end) => {
+    assert.equal(start, 1);
+    assert.equal(end, 10);
+    return [{ id: 123, title: 'Scheduled HN story', url: 'https://example.com/story',
+      score: 100, by: 'author', time: 1700000000, descendants: 12 }];
+  });
+  const pending = [];
+  await worker.scheduled({ cron: '30 2 * * *' }, s.env, { waitUntil: promise => pending.push(promise) });
+  await Promise.all(pending);
+  assert.equal(stories.mock.callCount(), 1);
+  assert.equal(s.messages.length, 1);
+  assert.equal(s.messages[0].chat_id, s.env.TELEGRAM_CHAT_ID);
+  assert.match(s.messages[0].text, /Hacker News Daily Digest/);
+  assert.match(s.messages[0].text, /Scheduled HN story/);
+  assert.equal(s.requests.length, 0);
+  assert.equal(s.records.has(BRIEF_LATEST_KEY), false);
+});
+
+test('unsupported cron fails without sending a message', async () => {
+  const s = setup();
+  await assert.rejects(worker.scheduled({ cron: '0 4 * * *' }, s.env, {
+    waitUntil: () => assert.fail('Unexpected scheduled work'),
+  }), /Unsupported scheduled cron/);
+  assert.equal(s.messages.length, 0);
 });
 
 test('group /brief uses the same cached report and the button opens HTML without fetching sources', async () => {
@@ -182,8 +223,10 @@ test('all image assets are embedded and the only script is served by the same Wo
   assert.match(await script.text(), /aria-current/);
 });
 
-test('production schedule is 11:00 UTC+8 and the brief is a public bot command', () => {
+test('production preserves both daily schedules and the brief is a public bot command', () => {
   const { readFileSync } = require('node:fs');
-  assert.match(readFileSync('wrangler.toml', 'utf8'), /crons\s*=\s*\["0 3 \* \* \*"\]/);
+  for (const path of ['wrangler.toml', 'wrangler.toml.example']) {
+    assert.match(readFileSync(path, 'utf8'), /crons\s*=\s*\["30 2 \* \* \*", "0 3 \* \* \*"\]/);
+  }
   assert.match(readFileSync('commands.txt', 'utf8'), /^brief - /m);
 });

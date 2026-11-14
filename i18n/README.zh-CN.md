@@ -1,7 +1,7 @@
 # Spider-Man Telegram Bot
 
 基于 TypeScript 和 Cloudflare Worker 的 Telegram 群组助手，提供新闻、行情、经济日程和运行状态。
-每天 **11:00 UTC+8** 抓取最新数据并推送市场简报；`/brief` 复用最近 24 小时内的简报。单项查询命令继续可用。
+每天 **10:30 UTC+8** 推送 Hacker News digest，**11:00 UTC+8** 抓取最新数据并推送市场简报；`/brief` 复用最近 24 小时内的简报。单项查询命令继续可用。
 
 [English](../README.md) · [简体中文](README.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
@@ -11,7 +11,7 @@
 
 | 命令 | 内容 | 应用缓存 |
 | --- | --- | --- |
-| `/brief` | 手机网页市场简报；自动推送强制刷新，手动调用复用缓存 | 24 小时 |
+| `/brief` | 手机网页市场简报；自动推送强制刷新，手动调用复用缓存 | 最新缓存 24 小时；历史保留 7 天 |
 | `/top10hn` | 按 Hacker News API 原始顺序返回 10 条有效文章 | 2 小时 |
 | `/top10ars` | Ars Technica RSS 最新 10 篇文章，含摘要和时间 | 2 小时 |
 | `/btc` | CoinGecko 批量 USD 报价与 24 小时涨跌，Coinbase 备用；失败显示“暂无报价” | 无 |
@@ -36,7 +36,7 @@ CoinGecko 匿名接口在 Worker 的共享出口可能返回 429，生产建议�
 
 Crypto 与 stocks 统一使用三列表格：资产、USD 价格、涨跌幅。时间以灰色小字显示在 Symbol 下方，不加“报价时间：”前缀，也不单独占用整行；Crypto 优先显示源时间，缺失时显示简报生成时间。UTC+8 统一在页面顶部注明，Crypto 涨跌幅为 24h，stocks 相对前一交易日收盘价。
 
-每天 11:00 UTC+8 自动任务跳过简报缓存与汇率缓存，重新请求全部数据源，然后将新简报缓存 24 小时。`/brief` 缓存命中不请求上游；不存在或过期才生成。每次生成独立链接，24 小时后过期；访问网页仅展示已有快照，不触发生成或发群。部分来源失败时保留其他板块并标注缺失，不使用旧数据冒充新数据。
+每天 11:00 UTC+8 自动任务跳过简报缓存与汇率缓存，重新请求全部数据源，然后将新简报缓存 24 小时。`/brief` 缓存命中不请求上游；不存在或过期才生成。每次生成独立链接，历史快照保留 7 天，最新简报缓存仍为 24 小时；访问网页仅展示已有快照，不触发生成或发群。部分来源失败时保留其他板块并标注缺失，不使用旧数据冒充新数据。
 
 `BRIEF_BASE_URL` 设置为当前 Worker 的 HTTPS origin。网页凭随机链接访问，无需登录；不要公开转发链接。KV 是 eventual consistency：跨区域并发的首次请求可能重复生成，同一 isolate 内会合并并发请求。清空 KV 同时会让简报链接失效。
 
@@ -190,11 +190,13 @@ npm run telegram:setup
 | `BRIEF_BASE_URL` | 简报网页的 HTTPS origin，供定时任务构造按钮链接 |
 | `HN_TOP_N` | 保留配置项；HN 命令固定取 Top 10 |
 
-每日 cron 改为市场简报，替代旧的 HN digest：
+两个独立的每日 cron 分别推送 10:30 UTC+8 的 HN digest 和 11:00 UTC+8 的市场简报：
+
+Cloudflare cron 表达式使用 UTC。Worker 根据表达式分别执行对应任务，两个配置项都需要保留。
 
 ```toml
 [triggers]
-crons = ["0 3 * * *"] # 11:00 UTC+8
+crons = ["30 2 * * *", "0 3 * * *"] # 10:30 和 11:00 UTC+8
 ```
 
 ### 本地命令
@@ -209,7 +211,7 @@ npm run deploy          # 部署 Worker 代码和配置的 cron
 npm run telegram:setup  # 更新 Webhook 和命令菜单
 ```
 
-`npm run trigger` 是本地 scheduled development 的别名，不会触发 production。
+`npm run trigger` 是本地 scheduled development 的别名，不会触发 production。通过 `/__scheduled?cron=30+2+*+*+*` 测试 HN，通过 `/__scheduled?cron=0+3+*+*+*` 测试市场简报。
 `sync.sh` 验证后部署；`deploy.sh` 安装依赖、验证后部署。两者均不自动运行菜单设置，因为设置脚本需要独立注入凭据。
 
 仅维护菜单时，也可通过 `POST /admin/commands/sync?language=zh`（支持空值、`en`、`zh`），在 `X-Telegram-Bot-Api-Secret-Token` header 使用临时 `COMMAND_SYNC_TOKEN`。接口同步并读回验证目标群、管理员和 owner 的菜单，不修改 Webhook。完成后删除该临时 Secret；Secret 不存在时接口拒绝请求。
@@ -244,7 +246,9 @@ npm run telegram:setup  # 更新 Webhook 和命令菜单
 
 **`/exrate` 报错：** 确认 `CURRENCY_API_KEY`。解析器兼容历史 flat 与 nested KV 格式，并在格式化前拒绝缺失或无效汇率。
 
-**没有每日推送：** 检查 cron 和 Telegram 发送日志。携带 shared secret 请求 `POST /trigger` 会生成最新市场简报并发送真实群消息；本地 scheduled 测试不能证明 production 已正常投递。
+**没有每日推送：** 确认 production 同时配置两个 cron：`30 2 * * *` 对应 10:30 UTC+8 的 HN，`0 3 * * *` 对应 11:00 UTC+8 的市场简报，再检查 cron 和 Telegram 发送日志。携带 shared secret 请求 `POST /trigger` 会发送最新市场简报，不执行 HN digest；本地 scheduled 测试不能证明 production 已正常投递。
+
+**历史简报无法打开：** 从原 Telegram 消息的按钮打开对应快照，自生成起保留 7 天。`/brief` 返回最新简报，不提供历史目录。过期或被删除的快照返回 HTTP 410，重新获取简报无法恢复旧快照；`/flushcache` 也会删除历史简报。
 
 ## 许可证
 
