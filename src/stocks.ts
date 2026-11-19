@@ -2,9 +2,9 @@ import { fetchYahooQuote, type MarketQuote } from './yahoo-finance';
 
 export type StockPrice = MarketQuote;
 
-// All instruments are USD-listed. AWS uses Amazon; gold uses the GLD ETF.
+// All instruments are USD-listed. AWS uses Amazon; Anthropic uses ANT.
 export const STOCK_SYMBOLS = [
-  'AAPL', 'NVDA', 'TSLA', 'TSM', 'AMZN', 'MSFT', 'GLD', 'NET', 'META', 'GOOGL',
+  'AAPL', 'NVDA', 'TSLA', 'TSM', 'AMZN', 'MSFT', 'ANT', 'NET', 'META', 'GOOGL',
 ] as const;
 
 export async function fetchStockPrices(): Promise<StockPrice[]> {
@@ -36,6 +36,6 @@ export function formatStockPrices(prices: StockPrice[]): string {
   const last = formatter.format(new Date(Math.max(...timestamps) * 1000));
   const quoteTime = first === last ? first : `${first} 至 ${last}`;
 
-  return `<b>📊 股票与黄金行情</b>\n\n${lines.join('\n')}\n\n`
+  return `<b>📊 股票行情</b>\n\n${lines.join('\n')}\n\n`
     + `报价：${quoteTime} UTC+8 · 常规交易时段`;
 }

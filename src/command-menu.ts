@@ -2,7 +2,7 @@ import commandText from '../commands.txt';
 import type { Env } from './types';
 
 type Command = { command: string; description: string };
-type Scope = { type: string; chat_id: string; user_id?: number };
+type Scope = { type: string; chat_id?: string; user_id?: number };
 
 async function call<T>(token: string, method: string, payload: unknown): Promise<T> {
   let response: Response;
@@ -38,6 +38,10 @@ export async function syncCommandMenus(env: Env, language = '') {
     throw new Error('Cannot identify current group owner');
   }
   const publicScopes: Scope[] = [
+    { type: 'default' },
+    { type: 'all_private_chats' },
+    { type: 'all_group_chats' },
+    { type: 'all_chat_administrators' },
     { type: 'chat', chat_id: chatId },
     { type: 'chat_administrators', chat_id: chatId },
     ...admins.filter(a => !a.user.is_bot && a.user.id !== owner.user.id)

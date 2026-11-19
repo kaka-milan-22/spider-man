@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-11-19]
+
+### Added
+
+- `/coin [symbol or ID]`: single-coin USD price and 24h change, defaulting to BTC. Resolve exact CoinGecko symbols, IDs and full names; distinguish missing coins from source failures and preserve small-token price precision.
+
+### Changed
+
+- Replace GLD with Anthropic (ANT) in `/stocks`; exclude pre-trading IPO metadata from traded quotes.
+- Add PAXG to `/btc` using CoinGecko `pax-gold` and Coinbase `PAXG-USD`.
+- Update brief sections, embedded logos, command descriptions and availability checks; refresh the latest-report cache without removing historical snapshots.
+
 ## [2026-11-14]
 
 ### Fixed

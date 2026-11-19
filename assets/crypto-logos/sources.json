@@ -48,5 +48,10 @@
     "coinGeckoId": "aave",
     "url": "https://coin-images.coingecko.com/coins/images/12645/large/aave-token-round.png?1720472354",
     "file": "aave.png"
+  },
+  "PAXG": {
+    "coinGeckoId": "pax-gold",
+    "url": "https://coin-images.coingecko.com/coins/images/9519/large/paxg.PNG",
+    "file": "paxg.png"
   }
 }

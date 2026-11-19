@@ -28,6 +28,7 @@ import { fetchAndFormatEthBrief } from './eth-brief';
 import { sendBrief, serveBrief } from './brief';
 import { syncCommandMenus, migrateWebhook } from './command-menu';
 import { probeCryptoSources } from './crypto-probe';
+import { lookupCoin, formatCoin } from './coin';
 
 async function flushCache(kv: KVNamespace): Promise<number> {
   let deleted = 0;
@@ -152,6 +153,17 @@ async function handleCommand(
       // Do not recreate a status key immediately after clearing every cache key.
       await sendMessage(config.telegramBotToken, String(chatId), `✅ 已清除 ${deleted} 条缓存记录`);
       console.log(`Flushed ${deleted} cache entries`);
+      return;
+    }
+
+    if (command === '/coin') {
+      const result = await observe(env.HN_STORIES, 'coin',
+        () => lookupCoin(args, { coinGeckoApiKey: env.COINGECKO_API_KEY }),
+        value => ({ ok: value.status === 'not-found' || (value.status === 'found' && value.quote.price !== null),
+          detail: value.status === 'not-found' ? '未匹配到币种'
+            : value.status === 'unavailable' ? '行情服务暂时不可用'
+            : value.quote.price === null ? '暂无报价' : '1/1 项可用' }));
+      await reply(formatCoin(result));
       return;
     }
 

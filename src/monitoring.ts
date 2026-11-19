@@ -2,6 +2,7 @@ import { displayTime, escapeHtml } from './display';
 
 export const MONITORS = {
   crypto: 'Crypto / CoinGecko + Coinbase',
+  coin: 'Coin / 单币行情',
   stocks: 'Stocks / Yahoo',
   market: 'Market / Yahoo',
   oil: 'Oil / Yahoo + GasWatch',

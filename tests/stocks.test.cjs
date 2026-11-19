@@ -24,7 +24,7 @@ test('requests all ten USD instruments anew on every call with cache disabled', 
   const first = await fetchStockPrices();
   const second = await fetchStockPrices();
   assert.deepEqual(first.map(quote => quote.symbol), [
-    'AAPL', 'NVDA', 'TSLA', 'TSM', 'AMZN', 'MSFT', 'GLD', 'NET', 'META', 'GOOGL',
+    'AAPL', 'NVDA', 'TSLA', 'TSM', 'AMZN', 'MSFT', 'ANT', 'NET', 'META', 'GOOGL',
   ]);
   assert.equal(requests.length, 20);
   assert.equal(first[0].price, 110);
@@ -86,13 +86,26 @@ test('missing previous close produces an unavailable change instead of a false z
   assert.doesNotMatch(formatStockPrices(prices), /NaN|Infinity/);
 });
 
+test('ANT excludes the IPO offer price until the first trade is available', async () => {
+  let traded = false;
+  mock.method(globalThis, 'fetch', async url => quoteResponse(ticker(url), ticker(url) === 'ANT'
+    ? { regularMarketPrice: traded ? 90 : 83, firstTradeDate: traded ? quoteTime : null }
+    : {}));
+  const before = await fetchStockPrices();
+  assert.equal(before.find(q => q.symbol === 'ANT').price, null);
+  assert.match(formatStockPrices(before), /ANT\s*: 暂无报价/);
+  assert.ok(before.filter(q => q.symbol !== 'ANT').every(q => q.price === 110));
+  traded = true;
+  assert.equal((await fetchStockPrices()).find(q => q.symbol === 'ANT').price, 90);
+});
+
 test('uses BTC-style HTML price rows and formats quote time in UTC+8', () => {
   const text = formatStockPrices([
     { symbol: 'AAPL', price: 110, changePercent: 10, updatedAt: quoteTime },
     { symbol: 'GOOGL', price: 1234.5, changePercent: -2.5, updatedAt: quoteTime },
     { symbol: 'META', price: 100, changePercent: 0, updatedAt: quoteTime },
   ]);
-  assert.match(text, /<b>📊 股票与黄金行情<\/b>/);
+  assert.match(text, /<b>📊 股票行情<\/b>/);
   assert.match(text, /<code>AAPL\s*: \$110\.00\s+🟢 \+10\.00%<\/code>/);
   assert.match(text, /<code>GOOGL: \$1,234\.50\s+🔴 -2\.50%<\/code>/);
   assert.match(text, /🟢 \+0\.00%/);

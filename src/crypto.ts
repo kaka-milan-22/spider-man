@@ -3,14 +3,15 @@ const COINGECKO_API = 'https://api.coingecko.com/api/v3/simple/price';
 const TIMEOUT_MS = 4000;
 const MAX_AGE_SECONDS = 300;
 
-const SYMBOLS = [
+export const CRYPTO_SYMBOLS = [
   { symbol: 'BTC', id: 'bitcoin' }, { symbol: 'ETH', id: 'ethereum' },
   { symbol: 'BNB', id: 'binancecoin' }, { symbol: 'SOL', id: 'solana' },
   { symbol: 'TON', id: 'the-open-network' }, { symbol: 'DOT', id: 'polkadot' },
   { symbol: 'LINK', id: 'chainlink' }, { symbol: 'AVAX', id: 'avalanche-2' },
   { symbol: 'UNI', id: 'uniswap' }, { symbol: 'AAVE', id: 'aave' },
+  { symbol: 'PAXG', id: 'pax-gold' },
 ];
-type Coin = typeof SYMBOLS[number];
+type Coin = typeof CRYPTO_SYMBOLS[number];
 export interface CryptoPrice {
   symbol: string;
   price: number | null;
@@ -96,9 +97,9 @@ async function fetchCoinbase(coin: Coin, attempts: number): Promise<CryptoPrice>
   return { symbol: coin.symbol, price: null, change24h: null, error: reason };
 }
 
-export async function fetchCryptoPrices(options: { coinGeckoApiKey?: string } = {}): Promise<CryptoPrice[]> {
+async function fetchPrices(coins: Coin[], options: { coinGeckoApiKey?: string }, useCoinbase = true): Promise<CryptoPrice[]> {
   const quotes = new Map<string, CryptoPrice>();
-  let pending = SYMBOLS;
+  let pending = coins;
   let primaryAttempts = 0;
   for (let round = 0; round < 2 && pending.length; round++) {
     const result = await fetchGecko(pending, options.coinGeckoApiKey);
@@ -110,13 +111,23 @@ export async function fetchCryptoPrices(options: { coinGeckoApiKey?: string } = 
   }
   // One coin gets at most three attempts across both providers, never three per provider.
   // Pace fallback chunks to reduce per-IP bursts on shared Worker egress.
-  for (let start = 0; start < pending.length; start += 4) {
+  for (let start = 0; useCoinbase && start < pending.length; start += 4) {
     if (start > 0) await pause(600 + Math.floor(Math.random() * 150));
     const chunk = pending.slice(start, start + 4);
     const fallback = await Promise.all(chunk.map(coin => fetchCoinbase(coin, 3 - primaryAttempts)));
     for (const quote of fallback) quotes.set(quote.symbol, quote);
   }
-  return SYMBOLS.map(coin => quotes.get(coin.symbol) || { symbol: coin.symbol, price: null, change24h: null });
+  return coins.map(coin => quotes.get(coin.symbol) || { symbol: coin.symbol, price: null, change24h: null });
+}
+
+export async function fetchCryptoPrices(options: { coinGeckoApiKey?: string } = {}): Promise<CryptoPrice[]> {
+  return fetchPrices(CRYPTO_SYMBOLS, options);
+}
+
+export async function fetchCryptoPrice(coin: Coin, options: { coinGeckoApiKey?: string } = {}): Promise<CryptoPrice> {
+  // Only use verified Coinbase mappings; arbitrary tokens can share a ticker.
+  const useCoinbase = CRYPTO_SYMBOLS.some(known => known.id === coin.id && known.symbol === coin.symbol);
+  return (await fetchPrices([coin], options, useCoinbase))[0];
 }
 
 export function formatCryptoPrices(prices: CryptoPrice[]): string {

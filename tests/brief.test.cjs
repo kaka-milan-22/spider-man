@@ -33,7 +33,7 @@ function setup() {
     }
     requests.push(url);
     if (u.hostname === 'api.coingecko.com') return Response.json(Object.fromEntries(
-      ['bitcoin', 'ethereum', 'binancecoin', 'solana', 'the-open-network', 'polkadot', 'chainlink', 'avalanche-2', 'uniswap', 'aave']
+      ['bitcoin', 'ethereum', 'binancecoin', 'solana', 'the-open-network', 'polkadot', 'chainlink', 'avalanche-2', 'uniswap', 'aave', 'pax-gold']
         .map(id => [id, { usd: 100 + revision, usd_24h_change: revision, last_updated_at: Math.floor(Date.now() / 1000) }])));
     if (u.hostname === 'api.exchange.coinbase.com') return Response.json({ open: '100', last: String(100 + revision) });
     if (u.hostname === 'query1.finance.yahoo.com') return Response.json({ chart: { error: null, result: [{ meta: {
@@ -91,6 +91,22 @@ test('24 hours refreshes the latest cache while historical links remain readable
   now++;
   assert.equal(await readBrief(s.env.HN_STORIES, first.id), null);
   assert.equal((await worker.fetch(new Request(`https://worker.example/brief/${first.id}`), s.env, {})).status, 410);
+});
+
+test('watchlist update ignores the old latest pointer and preserves its historical report', async () => {
+  const s = setup();
+  const old = await getBrief(s.env);
+  s.records.set('brief:v1:latest', old.id);
+  s.records.delete(BRIEF_LATEST_KEY);
+  s.next();
+  const fresh = await getBrief(s.env);
+  assert.notEqual(fresh.id, old.id);
+  assert.equal((await readBrief(s.env.HN_STORIES, old.id)).html, old.html);
+  assert.match(fresh.html, /PAXG/);
+  assert.match(fresh.html, />ANT</);
+  assert.doesNotMatch(fresh.html, />GLD<|股票与黄金/);
+  assert.doesNotMatch(fresh.summary, /部分数据缺失：[^\n]*Crypto/);
+  assert.doesNotMatch(fresh.summary, /股票与黄金/);
 });
 
 test('scheduled execution forces fresh data, bypasses currency cache and updates manual cache', async () => {
@@ -214,7 +230,7 @@ test('all image assets are embedded and the only script is served by the same Wo
   const s = setup();
   const report = await getBrief(s.env);
   const images = [...report.html.matchAll(/<img[^>]+src="([^"]+)"/g)].map(match => match[1]);
-  assert.equal(images.length, 20);
+  assert.equal(images.length, 21);
   assert.ok(images.every(src => src.startsWith('data:image/')));
   assert.doesNotMatch(report.html, /<link[^>]+href="https?:|url\(https?:/);
   assert.match(report.html, /<script src="\/brief-nav\.js" defer>/);

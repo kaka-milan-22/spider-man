@@ -1,8 +1,8 @@
 import type { Env } from './types';
 import { getConfig } from './config';
 import { displayTime, escapeHtml } from './display';
-import { fetchCryptoPrices, type CryptoPrice } from './crypto';
-import { fetchStockPrices } from './stocks';
+import { CRYPTO_SYMBOLS, fetchCryptoPrices, type CryptoPrice } from './crypto';
+import { STOCK_SYMBOLS, fetchStockPrices } from './stocks';
 import { fetchMarketOverview, MARKET_INSTRUMENTS } from './market';
 import { fetchOilPrices, type OilPrices } from './oil';
 import { fetchCalendar, CALENDAR_SOURCES, type CalendarResult } from './calendar';
@@ -15,12 +15,13 @@ import { CRYPTO_LOGOS } from './crypto-logos';
 
 export const BRIEF_TTL = 86400;
 export const BRIEF_RETENTION_TTL = 7 * 86400;
-export const BRIEF_LATEST_KEY = 'brief:v1:latest';
+// Refresh the latest report after the watchlist change; historical snapshots stay readable.
+export const BRIEF_LATEST_KEY = 'brief:v2:latest';
 export const BRIEF_REPORT_PREFIX = 'brief:v1:report:';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SECTIONS = [
   ['market', '市场概览', '/market'], ['crypto', 'Crypto 行情', '/btc'],
-  ['stocks', '股票与黄金', '/stocks'], ['exrate', 'USD 汇率', '/exrate'],
+  ['stocks', '股票', '/stocks'], ['exrate', 'USD 汇率', '/exrate'],
   ['oil', '原油与油价', '/oil'], ['calendar', '经济日程', '/calendar'],
 ] as const;
 const CURRENCIES = [
@@ -80,10 +81,10 @@ export function renderBrief(data: BriefData, generatedAt: number): string {
   }).join('')}</div><p class="footnote">变化相对前收盘。US 10Y 为收益率，1 bp = 0.01 个百分点。来源：Yahoo Finance，报价可能延迟。</p>` : missing;
   const crypto = data.crypto ? table(['资产', '价格 / USD', '24h'], data.crypto.map(q =>
     `<tr><td class="symbol">${CRYPTO_LOGOS[q.symbol] ? `<img class="stock-logo" alt="" src="${CRYPTO_LOGOS[q.symbol]}">` : ''}${escapeHtml(q.symbol)}<span class="asset-name">${q.updatedAt ? time(q.updatedAt) : displayTime(generatedAt)}</span></td><td>${q.price === null ? '暂无报价' : number(q.price, q.price < 1 ? 4 : 2)}</td><td>${change(q.change24h)}</td></tr>`))
-    + '<p class="footnote">CoinGecko 聚合 USD 行情为主，Coinbase USD 报价为备用；不同来源的数值可能略有差异。每个币种合计最多尝试 3 次，失败显示“暂无报价”，不使用旧价格兜底。</p>' : missing;
+    + '<p class="footnote">CoinGecko 聚合 USD 行情为主，Coinbase USD 报价为备用；不同来源的数值可能略有差异。PAXG 为 PAX Gold，价格单位为 USD / token。每个币种合计最多尝试 3 次，失败显示“暂无报价”，不使用旧价格兜底。</p>' : missing;
   const stocks = data.stocks ? table(['资产', '价格 / USD', '日涨跌'], data.stocks.map(q =>
     `<tr><td class="symbol">${STOCK_LOGOS[q.symbol] ? `<img class="stock-logo" alt="" src="${STOCK_LOGOS[q.symbol]}">` : ''}${escapeHtml(q.symbol)}<span class="asset-name">${time(q.updatedAt)}</span></td><td>${q.price === null ? '暂无报价' : number(q.price)}</td><td>${change(q.changePercent)}</td></tr>`))
-    + '<p class="footnote">来源：Yahoo Finance · regular trading session，休市时显示最近一次报价。GLD 为 ETF 股价 USD / 股，不是现货黄金 USD / 盎司。</p>' : missing;
+    + '<p class="footnote">来源：Yahoo Finance · regular trading session，休市时显示最近一次报价。ANT 为 Anthropic；尚无实际交易报价时显示“暂无报价”。</p>' : missing;
   const rates = data.exrate ? table(['币种', '1 USD 可兑换'], CURRENCIES.map(([code, flag]) =>
     `<tr><td class="symbol">${flag} ${code}</td><td>${number(data.exrate![code])}</td></tr>`))
     + `<p class="footnote">来源：currencyapi.com · 源更新时间：${rateTime(data.exrate.updatedAt)}。不等于银行或兑换商的实际成交价。</p>` : missing;
@@ -125,8 +126,8 @@ function incomplete(data: BriefData): string[] {
   const quotesOk = (quotes: Array<{ price: number | null }> | null, count: number) =>
     quotes?.length === count && quotes.every(q => q.price !== null);
   return [
-    !quotesOk(data.market, 5) && '市场概览', !quotesOk(data.crypto, 10) && 'Crypto',
-    !quotesOk(data.stocks, 10) && '股票', !data.exrate && '汇率',
+    !quotesOk(data.market, 5) && '市场概览', !quotesOk(data.crypto, CRYPTO_SYMBOLS.length) && 'Crypto',
+    !quotesOk(data.stocks, STOCK_SYMBOLS.length) && '股票', !data.exrate && '汇率',
     (!data.oil || !quotesOk(data.oil.international, 2) || !data.oil.philippines) && '油价',
     (!data.calendar || data.calendar.sources.some(s => !s.ok)) && '经济日程',
   ].filter((item): item is string => typeof item === 'string');
@@ -170,7 +171,7 @@ async function generateBrief(env: Env): Promise<BriefReport> {
     '<b>📋 每日市场简报</b>', `${displayTime(generatedAt)} UTC+8`, '',
     btc?.price != null ? `BTC：$${number(btc.price)}` : 'BTC：暂无报价',
     data.exrate ? `1 USD = ${number(data.exrate.PHP)} PHP / ${number(data.exrate.CNY)} CNY` : 'USD 汇率：暂无',
-    '', '市场概览 · Crypto · 股票与黄金', 'USD 汇率 · 原油与油价 · 经济日程',
+    '', '市场概览 · Crypto · 股票', 'USD 汇率 · 原油与油价 · 经济日程',
     ...(missingSections.length ? ['', `⚠️ 部分数据缺失：${missingSections.join('、')}`] : []),
     '', '点击下方按钮查看完整简报。', '历史简报保留 7 天，原链接可查看当时的快照。',
   ].join('\n');

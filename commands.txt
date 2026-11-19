@@ -1,8 +1,9 @@
 brief - Daily market brief: mobile page, cached 24 hours; refreshed daily at 11:00 UTC+8
 top10hn - Get top 1-10 Hacker News stories
 top10ars - Get top 10 Ars Technica articles
-btc - Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX, UNI, AAVE)
-stocks - Stock and gold ETF prices (AAPL, NVDA, TSLA, TSM, AMZN, MSFT, GLD, NET, META, GOOGL), no cache
+btc - Get crypto prices (BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX, UNI, AAVE, PAXG)
+coin - Get a coin's USD price and 24h change: /coin BTC (default BTC); symbol or CoinGecko ID
+stocks - Stock prices (AAPL, NVDA, TSLA, TSM, AMZN, MSFT, ANT, NET, META, GOOGL), no cache
 oil - Brent/WTI crude (USD/barrel) and Metro Manila gasoline/diesel (PHP/liter), no cache
 market - S&P 500, Nasdaq, DXY, US 10Y Treasury yield and VIX, no cache
 calendar - Upcoming FOMC, CPI, jobs and EIA releases in UTC+8; optional 30 days

@@ -19,6 +19,7 @@ interface ChartResponse {
         regularMarketPrice?: unknown;
         regularMarketTime?: unknown;
         chartPreviousClose?: unknown;
+        firstTradeDate?: unknown;
       };
     }>;
   };
@@ -59,6 +60,11 @@ export async function fetchYahooQuote(symbol: string): Promise<MarketQuote> {
       || !Number.isSafeInteger(meta.regularMarketTime)
       || !Number.isFinite(new Date(meta.regularMarketTime * 1000).getTime())) {
       return { ...unavailable, error: '报价缺失或格式异常' };
+    }
+
+    // IPO metadata can contain the offer price before any trade has taken place.
+    if (symbol === 'ANT' && meta.firstTradeDate === null) {
+      return { ...unavailable, error: '尚无实际交易报价' };
     }
 
     const change = positiveNumber(meta.chartPreviousClose)

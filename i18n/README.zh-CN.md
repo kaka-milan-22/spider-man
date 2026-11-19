@@ -15,7 +15,8 @@
 | `/top10hn` | 按 Hacker News API 原始顺序返回 10 条有效文章 | 2 小时 |
 | `/top10ars` | Ars Technica RSS 最新 10 篇文章，含摘要和时间 | 2 小时 |
 | `/btc` | CoinGecko 批量 USD 报价与 24 小时涨跌，Coinbase 备用；失败显示“暂无报价” | 无 |
-| `/stocks` | 10 个美股 / 黄金 ETF 的价格和日涨跌 | 无 |
+| `/coin [Symbol 或 ID]` | 查询单币 USD 价格和 24h 涨跌幅；不带参数默认 BTC | 无 |
+| `/stocks` | 10 个美股（含 Anthropic / ANT） 的价格和日涨跌 | 无 |
 | `/oil` | Brent/WTI Futures 与 Metro Manila 汽油 / Diesel 参考价 | 无 |
 | `/market` | S&P 500、Nasdaq Composite、DXY、US 10Y Treasury yield、VIX | 无 |
 | `/calendar` | 未来 7 天的 FOMC、CPI、非农、EIA 官方日程 | 无 |
@@ -25,24 +26,26 @@
 | `/status` | 最近调用结果、耗时、成功时间和实时 Webhook 状态 | 仅 owner |
 | `/flushcache` | 清除绑定 KV namespace 的所有 key，包括状态记录 | 仅 owner |
 
-`/btc` 请求 BTC、ETH、BNB、SOL、TON、DOT、LINK、AVAX、UNI、AAVE。CoinGecko 一次批量查询，仅对缺失或过期币种补查一次；Coinbase 仅补查剩余币种，最多 4 个并发，分批错峰。两个来源合计每个币种最多尝试 3 次，每次 timeout 为 4 秒；遵守 Retry-After，长限流窗口内不继续重试。拒绝超过 5 分钟的 CoinGecko 报价。缺少 24h 涨跌时保留有效价格，不使用旧价格兜底。
+`/btc` 请求 BTC、ETH、BNB、SOL、TON、DOT、LINK、AVAX、UNI、AAVE、PAXG。CoinGecko 一次批量查询，仅对缺失或过期币种补查一次；Coinbase 仅补查剩余币种，最多 4 个并发，分批错峰。两个来源合计每个币种最多尝试 3 次，每次 timeout 为 4 秒；遵守 Retry-After，长限流窗口内不继续重试。拒绝超过 5 分钟的 CoinGecko 报价。缺少 24h 涨跌时保留有效价格，不使用旧价格兜底。
 当前没有 `/alert`，也没有后台行情轮询。
+
+`/coin` 不带参数默认查询 BTC，例如 `/coin eth`、`/coin PAXG`、`/coin doge`、`/coin shiba-inu`。Symbol、CoinGecko ID 或完整名称不区分大小写，必须精确匹配；重名 Symbol 优先选市值排名最高的币，返回结果注明 ID，明确指定 ID 时优先按 ID 匹配。找不到时回复“找不到这个币”；接口失败或暂无报价单独提示。已知币种沿用现有主备源；其他币种只使用 CoinGecko，避免重名 Symbol 错配 Coinbase 资产。不复用旧报价。
 
 CoinGecko 匿名接口在 Worker 的共享出口可能返回 429，生产建议设置 `COINGECKO_API_KEY`。Key 仅通过 `x-cg-demo-api-key` header 发给 CoinGecko。Crypto 板块底部统一说明数据源，Coinbase 为独立交易所 USD 报价，可能与聚合报价略有差异。
 
 ## 市场简报
 
-页面顺序：市场概览、Crypto、股票与黄金、USD 汇率、原油及菲律宾油价、未来 7 天经济日程。深色手机布局，导航按钮高 48px，涨绿跌红；汇率逐行显示并包含国旗。股票与 Crypto Logo 缓存在项目并内嵌，不向外部图片服务发请求。
+页面顺序：市场概览、Crypto（含 PAXG）、股票、USD 汇率、原油及菲律宾油价、未来 7 天经济日程。深色手机布局，导航按钮高 48px，涨绿跌红；汇率逐行显示并包含国旗。股票与 Crypto Logo 缓存在项目并内嵌，不向外部图片服务发请求。
 
 Crypto 与 stocks 统一使用三列表格：资产、USD 价格、涨跌幅。时间以灰色小字显示在 Symbol 下方，不加“报价时间：”前缀，也不单独占用整行；Crypto 优先显示源时间，缺失时显示简报生成时间。UTC+8 统一在页面顶部注明，Crypto 涨跌幅为 24h，stocks 相对前一交易日收盘价。
 
-每天 11:00 UTC+8 自动任务跳过简报缓存与汇率缓存，重新请求全部数据源，然后将新简报缓存 24 小时。`/brief` 缓存命中不请求上游；不存在或过期才生成。每次生成独立链接，历史快照保留 7 天，最新简报缓存仍为 24 小时；访问网页仅展示已有快照，不触发生成或发群。部分来源失败时保留其他板块并标注缺失，不使用旧数据冒充新数据。
+每天 11:00 UTC+8 自动任务跳过简报缓存与汇率缓存，重新请求全部数据源，然后将新简报缓存 24 小时。`/brief` 缓存命中不请求上游；不存在或过期才生成。关注列表更新会使最新简报缓存失效，保留历史链接。每次生成独立链接，历史快照保留 7 天，最新简报缓存仍为 24 小时；访问网页仅展示已有快照，不触发生成或发群。部分来源失败时保留其他板块并标注缺失，不使用旧数据冒充新数据。
 
 `BRIEF_BASE_URL` 设置为当前 Worker 的 HTTPS origin。网页凭随机链接访问，无需登录；不要公开转发链接。KV 是 eventual consistency：跨区域并发的首次请求可能重复生成，同一 isolate 内会合并并发请求。清空 KV 同时会让简报链接失效。
 
 ## 行情与布局
 
-### 美股与黄金
+### 美股
 
 `/stocks` 使用 Yahoo Finance，沿用 `/btc` 的紧凑布局。
 
@@ -54,10 +57,12 @@ Crypto 与 stocks 统一使用三列表格：资产、USD 价格、涨跌幅。�
 | TSM | 台积电的美股 ADR |
 | AMZN | Amazon，AWS 的母公司 |
 | MSFT | Microsoft |
-| GLD | SPDR Gold Shares ETF；价格是 USD/股，不是现货黄金 USD/盎司 |
+| ANT | Anthropic Class A |
 | NET | Cloudflare |
 | META | Meta Platforms |
 | GOOGL | Alphabet Class A |
+
+PAXG 使用 CoinGecko ID `pax-gold`，备用交易对为 Coinbase `PAXG-USD`，单位为 USD / token。Anthropic 尚无实际首笔交易时，IPO 初始数据会显示为“暂无报价”。
 
 返回 regular trading session 报价，休市时使用最近一次该时段的报价；涨跌相对前一交易日收盘价。
 底部显示源数据的报价时间（UTC+8），不会把本次查询时间当成报价时间。

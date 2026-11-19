@@ -15,7 +15,8 @@ Public commands work for every member of the configured group. Commands from oth
 | `/top10hn` | Top 10 valid stories in the order supplied by Hacker News | 2 hours |
 | `/top10ars` | Latest 10 Ars Technica RSS articles, with excerpts and dates | 2 hours |
 | `/btc` | CoinGecko USD batch quotes with Coinbase fallback; unavailable pairs remain visible | None |
-| `/stocks` | Nine US-listed stocks and one gold ETF, with daily changes | None |
+| `/coin [symbol or ID]` | One coin's USD price and 24h change; defaults to BTC | None |
+| `/stocks` | Ten US-listed stocks, including Anthropic (ANT), with daily changes | None |
 | `/oil` | Brent/WTI Futures and Metro Manila gasoline/Diesel reference prices | None |
 | `/market` | S&P 500, Nasdaq Composite, DXY, US 10Y Treasury yield and VIX | None |
 | `/calendar` | Official FOMC, CPI, Employment Situation and EIA releases over the next 7 days | None |
@@ -25,24 +26,26 @@ Public commands work for every member of the configured group. Commands from oth
 | `/status` | Recent source results, request duration, last success and live Webhook status | Owner only |
 | `/flushcache` | Clear every key in the bound KV namespace, including status records | Owner only |
 
-`/btc` requests BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX, UNI and AAVE. CoinGecko queries all coins in one batch and retries only missing/stale results once; Coinbase fetches only unresolved pairs, with at most four concurrent requests and pacing between chunks. The combined per-coin budget is three attempts across both sources, with a 4-second request timeout. Responses honor Retry-After; long rate-limit windows stop retries. Primary quotes older than five minutes are rejected. A missing 24-hour change never discards a valid price; no previous prices are reused.
+`/btc` requests BTC, ETH, BNB, SOL, TON, DOT, LINK, AVAX, UNI, AAVE and PAXG. CoinGecko queries all coins in one batch and retries only missing/stale results once; Coinbase fetches only unresolved pairs, with at most four concurrent requests and pacing between chunks. The combined per-coin budget is three attempts across both sources, with a 4-second request timeout. Responses honor Retry-After; long rate-limit windows stop retries. Primary quotes older than five minutes are rejected. A missing 24-hour change never discards a valid price; no previous prices are reused.
 `/alert` is not implemented, and there is no background market polling.
+
+`/coin` defaults to BTC. Examples: `/coin eth`, `/coin PAXG`, `/coin doge` and `/coin shiba-inu`. Known coins use the existing quote sources; other coins are resolved through CoinGecko search with an exact symbol, ID or full-name match. For duplicate symbols, the highest-ranked coin is selected, and the resolved ID is shown. Explicit IDs take priority. Unknown coins return `找不到这个币`; source failures and missing prices are reported separately. Arbitrary tokens use CoinGecko quotes only, so a shared ticker cannot select an unrelated Coinbase asset. No previous quotes are reused.
 
 Configure `COINGECKO_API_KEY` for production: anonymous CoinGecko calls can be rate-limited on shared Worker egress. The key is sent only in the `x-cg-demo-api-key` header. The Crypto section footer identifies the data sources; Coinbase exchange USD prices can differ from CoinGecko aggregate prices.
 
 ## Market brief
 
-The report contains market overview, Crypto, stocks/gold, USD rates, oil/Philippine fuel and the next seven days of economic events, in that order. It uses the approved dark mobile layout with large navigation buttons, green/red changes and currency flags. Stock and Crypto logos are cached project assets embedded in the page.
+The report contains market overview, Crypto (including PAXG), stocks, USD rates, oil/Philippine fuel and the next seven days of economic events, in that order. It uses the approved dark mobile layout with large navigation buttons, green/red changes and currency flags. Stock and Crypto logos are cached project assets embedded in the page.
 
 Crypto and stocks share the same three-column table layout: asset, USD price and change. Timestamps appear below the symbol in muted text, without a “报价时间：” prefix or a separate full-width row. Crypto uses the source timestamp when available, otherwise the report generation time; the report header states UTC+8 once. Crypto changes cover 24 hours; stock changes are relative to the previous session's close.
 
-At 11:00 UTC+8 the scheduled job requests fresh upstream data, bypassing both report and currency caches, and replaces the 24-hour report cache. `/brief` reads the cache; only a miss or expiry generates a report. Each immutable historical report is retained for 7 days; the latest-report cache still expires after 24 hours. Opening a page never fetches upstream data or sends messages. Partial source failures are marked explicitly; old data is not substituted.
+At 11:00 UTC+8 the scheduled job requests fresh upstream data, bypassing both report and currency caches, and replaces the 24-hour report cache. `/brief` reads the cache; only a miss or expiry generates a report. Watchlist updates invalidate the latest-report cache while preserving historical links. Each immutable historical report is retained for 7 days; the latest-report cache still expires after 24 hours. Opening a page never fetches upstream data or sends messages. Partial source failures are marked explicitly; old data is not substituted.
 
 Set `BRIEF_BASE_URL` to the current Worker HTTPS origin. Random report links open without login; anyone with a link can view it. KV is eventually consistent, so concurrent first requests in different regions can generate duplicate reports; overlapping requests within an isolate are coalesced. Flushing KV invalidates report links too.
 
 ## Quotes and display
 
-### Stocks and gold
+### Stocks
 
 `/stocks` uses Yahoo Finance and keeps the compact `/btc` layout.
 
@@ -54,10 +57,13 @@ Set `BRIEF_BASE_URL` to the current Worker HTTPS origin. Random report links ope
 | TSM | Taiwan Semiconductor Manufacturing Company US ADR |
 | AMZN | Amazon; represents the parent company of AWS |
 | MSFT | Microsoft |
-| GLD | SPDR Gold Shares ETF; USD per share, not spot gold per ounce |
+| ANT | Anthropic Class A |
 | NET | Cloudflare |
 | META | Meta Platforms |
 | GOOGL | Alphabet Class A |
+
+PAXG uses the CoinGecko ID `pax-gold` with Coinbase `PAXG-USD` fallback; its price is USD per token.
+Anthropic IPO metadata without an actual first trade is shown as unavailable rather than as a traded quote.
 
 Quotes use the regular trading session, including the most recent session when the market is closed.
 Changes are relative to the previous session's close. The footer shows the source quote time in UTC+8.

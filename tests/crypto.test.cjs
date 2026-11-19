@@ -3,7 +3,7 @@ const { test, afterEach, mock } = require('node:test');
 require('./register-typescript.cjs');
 const { fetchCryptoPrices, formatCryptoPrices } = require('../src/crypto.ts');
 const worker = require('../src/index.ts').default;
-const coins = { BTC: 'bitcoin', ETH: 'ethereum', BNB: 'binancecoin', SOL: 'solana', TON: 'the-open-network', DOT: 'polkadot', LINK: 'chainlink', AVAX: 'avalanche-2', UNI: 'uniswap', AAVE: 'aave' };
+const coins = { BTC: 'bitcoin', ETH: 'ethereum', BNB: 'binancecoin', SOL: 'solana', TON: 'the-open-network', DOT: 'polkadot', LINK: 'chainlink', AVAX: 'avalanche-2', UNI: 'uniswap', AAVE: 'aave', PAXG: 'pax-gold' };
 afterEach(() => mock.restoreAll());
 function fastRetries() {
   mock.method(globalThis, 'setTimeout', callback => { queueMicrotask(callback); return 0; });
@@ -18,7 +18,7 @@ function isGecko(url) { return new URL(url).hostname === 'api.coingecko.com'; }
 function pair(url) { return new URL(url).pathname.split('/')[2]; }
 function success() { return Response.json({ open: '100', last: '110' }); }
 
-test('queries all ten USD coins in one authenticated batch and makes no Coinbase requests on success', async () => {
+test('queries all eleven USD coins in one authenticated batch and makes no Coinbase requests on success', async () => {
   const requests = [];
   mock.method(globalThis, 'fetch', async (url, options) => {
     requests.push({ url, options });
@@ -33,7 +33,7 @@ test('queries all ten USD coins in one authenticated batch and makes no Coinbase
   });
   const prices = await fetchCryptoPrices({ coinGeckoApiKey: 'test-key' });
   assert.equal(requests.length, 1);
-  assert.equal(new URL(requests[0].url).searchParams.get('ids').split(',').length, 10);
+  assert.equal(new URL(requests[0].url).searchParams.get('ids').split(',').length, 11);
   assert.deepEqual(prices.map(p => p.symbol), Object.keys(coins));
   assert.ok(prices.every(p => p.source === 'CoinGecko' && p.price === 110 && p.change24h === 10));
 });
@@ -69,10 +69,25 @@ test('two primary failures leave only one fallback attempt and never exceed thre
   });
   const prices = await fetchCryptoPrices();
   assert.equal(batches, 2);
-  assert.equal(calls.size, 10);
+  assert.equal(calls.size, 11);
   assert.ok([...calls.values()].every(count => count === 1));
-  assert.equal((formatCryptoPrices(prices).match(/暂无报价/g) || []).length, 10);
+  assert.equal((formatCryptoPrices(prices).match(/暂无报价/g) || []).length, 11);
   assert.doesNotMatch(formatCryptoPrices(prices), /NaN|Infinity/);
+});
+
+test('PAXG retries pax-gold then falls back to PAXG-USD without refetching other coins', async () => {
+  fastRetries();
+  const requests = [];
+  mock.method(globalThis, 'fetch', async url => {
+    requests.push(url);
+    return isGecko(url) ? gecko({ 'pax-gold': { usd: null } }) : success();
+  });
+  const prices = await fetchCryptoPrices();
+  assert.equal(requests.length, 3);
+  assert.equal(new URL(requests[1]).searchParams.get('ids'), 'pax-gold');
+  assert.equal(pair(requests[2]), 'PAXG-USD');
+  assert.equal(prices.find(q => q.symbol === 'PAXG').source, 'Coinbase');
+  assert.match(formatCryptoPrices(prices), /PAXG: \$110\.00\s+🟢 \+10\.00%/);
 });
 
 test('non-retryable primary errors allow at most two Coinbase attempts and cap fallback concurrency at four', async () => {
@@ -104,7 +119,7 @@ test('does not retry a rate-limited source before a long Retry-After expires', a
   });
   assert.ok((await fetchCryptoPrices()).every(p => p.price === null));
   assert.equal(primary, 1);
-  assert.equal(secondary, 10);
+  assert.equal(secondary, 11);
 });
 
 test('preserves valid prices when 24h change is missing and rejects invalid or future/stale primary prices', async () => {
@@ -159,6 +174,6 @@ test('the webhook forwards the Demo key and records actual partial availability'
   assert.match(messages[0].text, /BNB\s*: 暂无报价/);
   const record = JSON.parse(records.get('status:v1:crypto'));
   assert.equal(record.ok, false);
-  assert.match(record.detail, /9\/10/);
+  assert.match(record.detail, /10\/11/);
   assert.doesNotMatch(JSON.stringify([...records.values()]), /test-key/);
 });

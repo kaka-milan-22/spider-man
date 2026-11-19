@@ -85,7 +85,7 @@ test('fails closed when the Worker webhook secret is not configured', async () =
 });
 
 test('ignores all commands from other groups and private chats', async () => {
-  for (const command of ['/flushcache', '/status', '/brief', '/market', '/calendar', '/btc', '/stocks', '/oil', '/top10hn', '/top10ars', '/exrate', '/eth']) {
+  for (const command of ['/flushcache', '/status', '/brief', '/market', '/calendar', '/btc', '/coin', '/stocks', '/oil', '/top10hn', '/top10ars', '/exrate', '/eth']) {
     for (const chat of [{ id: groupId - 1, type: 'supergroup' }, { id: 42, type: 'private' }]) {
       assert.equal((await deliver(update(42, command, { chat }))).status, 200);
     }

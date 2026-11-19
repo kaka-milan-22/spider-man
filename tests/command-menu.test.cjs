@@ -25,12 +25,17 @@ test('menu synchronization verifies public/admin/owner scopes for all supported 
     assert.fail('Unexpected Telegram call');
   });
   for (const language of ['', 'en', 'zh']) {
-    assert.equal((await syncCommandMenus(env, language)).verifiedScopes, 4);
+    assert.equal((await syncCommandMenus(env, language)).verifiedScopes, 8);
   }
   const updates = calls.filter(c => c.method === 'setMyCommands');
-  assert.equal(updates.length, 12);
+  assert.equal(updates.length, 24);
+  assert.deepEqual(new Set(updates.map(c => c.p.scope.type)), new Set([
+    'default', 'all_private_chats', 'all_group_chats', 'all_chat_administrators',
+    'chat', 'chat_administrators', 'chat_member',
+  ]));
   for (const { p } of updates) {
     assert.equal(p.commands[0].command, 'brief');
+    assert.ok(p.commands.some(c => c.command === 'coin'));
     const privileged = p.scope.type === 'chat_member' && p.scope.user_id === 42;
     assert.equal(p.commands.some(c => c.command === 'status'), privileged);
     assert.equal(p.commands.some(c => c.command === 'flushcache'), privileged);
