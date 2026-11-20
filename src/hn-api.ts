@@ -4,7 +4,7 @@ const HN_API_BASE = 'https://hacker-news.firebaseio.com/v0';
 
 export async function getTopStoryIds(limit: number): Promise<number[]> {
   try {
-    const response = await fetch(`${HN_API_BASE}/topstories.json`);
+    const response = await fetch(`${HN_API_BASE}/topstories.json`, { signal: AbortSignal.timeout(4000) });
 
     if (!response.ok) {
       throw new HNAPIError(
@@ -27,7 +27,7 @@ export async function getTopStoryIds(limit: number): Promise<number[]> {
 
 export async function getStory(id: number): Promise<HNStory | null> {
   try {
-    const response = await fetch(`${HN_API_BASE}/item/${id}.json`);
+    const response = await fetch(`${HN_API_BASE}/item/${id}.json`, { signal: AbortSignal.timeout(4000) });
 
     if (!response.ok) {
       console.warn(`Failed to fetch story ${id}: ${response.status}`);

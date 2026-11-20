@@ -1,3 +1,4 @@
+import { readCache, writeCache } from './storage';
 // API client for currencyapi.com to fetch USD exchange rates to 7 Asian currencies
 // - PHP, MYR, TWD, HKD, CNY, THB, VND
 
@@ -77,7 +78,7 @@ function normalizeRates(value: unknown): ExchangeRates | null {
 
 async function readCachedRates(kv: KVNamespace): Promise<ExchangeRates | null> {
   try {
-    const cached = await kv.get(CACHE_KEY, 'json');
+    const cached = await readCache(() => kv.get(CACHE_KEY, 'json'));
     const rates = normalizeRates(cached);
     if (cached && !rates) console.warn('Ignoring invalid exchange-rate cache');
     return rates;
@@ -124,9 +125,9 @@ export async function fetchExchangeRates(
     });
     if (!rates) throw new Error('Currency API response is missing valid exchange rates');
 
-    await kv.put(CACHE_KEY, JSON.stringify(rates), {
+    await writeCache(() => kv.put(CACHE_KEY, JSON.stringify(rates), {
       expirationTtl: CACHE_TTL,
-    });
+    }));
     console.log('Cached exchange rates');
 
     return rates;

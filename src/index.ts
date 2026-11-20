@@ -1,3 +1,4 @@
+import { readCache, writeCache, withTimeout } from './storage';
 import { Env, ProcessedStory, HNStory, TelegramUpdate } from './types';
 import { getConfig } from './config';
 import { getStoriesByRange } from './hn-api';
@@ -34,9 +35,14 @@ async function flushCache(kv: KVNamespace): Promise<number> {
   let deleted = 0;
   let cursor: string | undefined;
 
+  const deadline = Date.now() + 10000;
   do {
-    const list = await kv.list({ cursor });
-    await Promise.all(list.keys.map(key => kv.delete(key.name)));
+    if (Date.now() >= deadline) throw new Error('清理缓存超时，可能已有部分记录删除，请稍后重试');
+    const list = await withTimeout(() => kv.list({ cursor }));
+    for (let start = 0; start < list.keys.length; start += 20) {
+      if (Date.now() >= deadline) throw new Error('缓存清理超时');
+      await Promise.all(list.keys.slice(start, start + 20).map(key => withTimeout(() => kv.delete(key.name))));
+    }
     deleted += list.keys.length;
     cursor = list.list_complete ? undefined : list.cursor;
   } while (cursor);
@@ -66,7 +72,7 @@ const HN_CACHE_TTL = 7200; // 120 minutes
 
 async function fetchTopHNStories(kv: KVNamespace): Promise<ProcessedStory[]> {
   try {
-    const cached = await kv.get(HN_CACHE_KEY, 'json');
+    const cached = await readCache(() => kv.get(HN_CACHE_KEY, 'json'));
     if (cached) {
       console.log('Cache hit for HN top stories');
       return cached as ProcessedStory[];
@@ -76,7 +82,7 @@ async function fetchTopHNStories(kv: KVNamespace): Promise<ProcessedStory[]> {
     const processed = stories.map(processStory).filter((s): s is ProcessedStory => s !== null);
 
     if (processed.length > 0) {
-      await kv.put(HN_CACHE_KEY, JSON.stringify(processed), { expirationTtl: HN_CACHE_TTL });
+      await writeCache(() => kv.put(HN_CACHE_KEY, JSON.stringify(processed), { expirationTtl: HN_CACHE_TTL }));
       console.log(`Cached ${processed.length} HN stories`);
     }
 
@@ -84,7 +90,7 @@ async function fetchTopHNStories(kv: KVNamespace): Promise<ProcessedStory[]> {
   } catch (error) {
     console.error('Error fetching HN stories:', error);
     try {
-      const cached = await kv.get(HN_CACHE_KEY, 'json');
+      const cached = await readCache(() => kv.get(HN_CACHE_KEY, 'json'));
       if (cached) {
         console.log('Returning cached data after fetch error');
         return cached as ProcessedStory[];
@@ -149,7 +155,12 @@ async function handleCommand(
         return;
       }
       console.log(`Processing flush cache command for chat ${chatId}`);
-      const deleted = await flushCache(env.HN_STORIES);
+      let deleted: number;
+      try { deleted = await flushCache(env.HN_STORIES); }
+      catch {
+        await sendMessage(config.telegramBotToken, String(chatId), '❌ 缓存清理失败或超时，可能已有部分记录删除，请稍后重试');
+        return;
+      }
       // Do not recreate a status key immediately after clearing every cache key.
       await sendMessage(config.telegramBotToken, String(chatId), `✅ 已清除 ${deleted} 条缓存记录`);
       console.log(`Flushed ${deleted} cache entries`);

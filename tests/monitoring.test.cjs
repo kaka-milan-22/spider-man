@@ -43,3 +43,28 @@ test('status distinguishes unknown/partial results and escapes metadata in HTML'
   assert.match(text, /不代表已检测上游/);
   assert.doesNotMatch(text, /NaN|undefined/);
 });
+
+test('hung KV reads cannot block successful results or replace source errors', async () => {
+  const kv = { get: () => new Promise(() => {}), put: async () => assert.fail('must not write after read timeout') };
+  const [result] = await Promise.all([
+    observe(kv, 'crypto', async () => 'fresh quote'),
+    assert.rejects(observe(kv, 'market', async () => { throw new Error('source failure'); }), /source failure/),
+  ]);
+  assert.equal(result, 'fresh quote');
+});
+
+test('hung KV writes cannot block a successful result', async () => {
+  const kv = { get: async () => null, put: () => new Promise(() => {}) };
+  assert.equal(await observe(kv, 'crypto', async () => 'fresh quote'), 'fresh quote');
+});
+
+test('status reports hung keys while retaining healthy source records', async () => {
+  const kv = memoryKV();
+  await observe(kv, 'market', async () => 'quote');
+  const get = kv.get;
+  kv.get = key => key === STATUS_PREFIX + 'crypto' ? new Promise(() => {}) : get(key);
+  const text = await formatStatus(kv, { configured: true, pendingUpdates: 0 });
+  assert.match(text, /Crypto \/ CoinGecko \+ Coinbase：状态存储读取失败/);
+  assert.match(text, /✅ Market \/ Yahoo/);
+  assert.match(text, /Webhook：已配置/);
+});

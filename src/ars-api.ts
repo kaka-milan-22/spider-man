@@ -1,3 +1,4 @@
+import { readCache, writeCache } from './storage';
 import { ArsArticle, ArsAPIError } from './types';
 
 const ARS_RSS_URL = 'https://arstechnica.com/feed/';
@@ -6,7 +7,7 @@ const CACHE_TTL = 7200; // 120 minutes
 
 export async function getArsTopStories(kv: KVNamespace): Promise<ArsArticle[]> {
   try {
-    const cached = await kv.get(CACHE_KEY, 'json');
+    const cached = await readCache(() => kv.get(CACHE_KEY, 'json'));
     if (cached) {
       console.log('Cache hit for Ars Technica top stories');
       return cached as ArsArticle[];
@@ -37,9 +38,9 @@ export async function getArsTopStories(kv: KVNamespace): Promise<ArsArticle[]> {
 
     
     if (articles.length > 0) {
-      await kv.put(CACHE_KEY, JSON.stringify(articles), {
+      await writeCache(() => kv.put(CACHE_KEY, JSON.stringify(articles), {
         expirationTtl: CACHE_TTL,
-      });
+      }));
       console.log(`Cached ${articles.length} Ars Technica articles`);
     }
 
@@ -49,7 +50,7 @@ export async function getArsTopStories(kv: KVNamespace): Promise<ArsArticle[]> {
     
     
     try {
-      const cached = await kv.get(CACHE_KEY, 'json');
+      const cached = await readCache(() => kv.get(CACHE_KEY, 'json'));
       if (cached) {
         console.log('Returning cached data after fetch error');
         return cached as ArsArticle[];

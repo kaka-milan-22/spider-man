@@ -6,7 +6,11 @@ const worker = require('../src/index.ts').default;
 const coins = { BTC: 'bitcoin', ETH: 'ethereum', BNB: 'binancecoin', SOL: 'solana', TON: 'the-open-network', DOT: 'polkadot', LINK: 'chainlink', AVAX: 'avalanche-2', UNI: 'uniswap', AAVE: 'aave', PAXG: 'pax-gold' };
 afterEach(() => mock.restoreAll());
 function fastRetries() {
-  mock.method(globalThis, 'setTimeout', callback => { queueMicrotask(callback); return 0; });
+  const schedule = globalThis.setTimeout;
+  mock.method(globalThis, 'setTimeout', (callback, ms, ...args) => {
+    if (ms >= 1000) return schedule(callback, ms, ...args);
+    queueMicrotask(callback); return 0;
+  });
   mock.method(console, 'warn', () => {});
 }
 function gecko(overrides = {}) {

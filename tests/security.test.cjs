@@ -114,6 +114,18 @@ test('the group owner can clear all cache pages', async () => {
   assert.match(calls[1].payload.text, /2/);
 });
 
+test('a stalled cache deletion reports possible partial failure without claiming success', async () => {
+  const schedule = globalThis.setTimeout;
+  mock.method(globalThis, 'setTimeout', (callback, ms, ...args) => schedule(callback, ms === 1000 ? 1 : ms, ...args));
+  env.HN_STORIES.delete = () => new Promise(() => {});
+  assert.equal((await deliver(update())).status, 200);
+  const messages = calls.filter(call => call.method === 'sendMessage');
+  assert.equal(messages.length, 1);
+  assert.match(messages[0].payload.text, /清理失败或超时.*部分记录删除/);
+  assert.doesNotMatch(messages[0].payload.text, /✅|已清除/);
+  assert.equal(env.HN_STORIES.list.mock.callCount(), 1);
+});
+
 test('ownership is rechecked and a former owner immediately loses permission', async () => {
   await deliver(update(42));
   ownerId = 99;

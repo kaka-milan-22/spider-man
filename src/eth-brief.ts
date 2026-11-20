@@ -1,3 +1,4 @@
+import { readCache, writeCache } from './storage';
 const COINGECKO_SIMPLE_API = 'https://api.coingecko.com/api/v3/simple/price';
 const COINBASE_API = 'https://api.exchange.coinbase.com/products';
 const DEFILLAMA_API = 'https://api.llama.fi';
@@ -68,8 +69,8 @@ async function fetchPrices(): Promise<{ eth: { price: number; change24h: number;
   try {
     // Use Coinbase for price + 24h change (same source as /btc command — reliable on CF Workers)
     const [ethRes, btcRes] = await Promise.all([
-      fetch(`${COINBASE_API}/ETH-USD/stats`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } }),
-      fetch(`${COINBASE_API}/BTC-USD/stats`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } }),
+      fetch(`${COINBASE_API}/ETH-USD/stats`, { signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } }),
+      fetch(`${COINBASE_API}/BTC-USD/stats`, { signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } }),
     ]);
     if (!ethRes.ok || !btcRes.ok) return null;
     const [ethData, btcData] = await Promise.all([
@@ -87,7 +88,7 @@ async function fetchPrices(): Promise<{ eth: { price: number; change24h: number;
     try {
       const mcRes = await fetch(
         `${COINGECKO_SIMPLE_API}?ids=ethereum,bitcoin&vs_currencies=usd&include_market_cap=true`,
-        { headers: { Accept: 'application/json' } }
+        { signal: AbortSignal.timeout(4000), headers: { Accept: 'application/json' } }
       );
       if (mcRes.ok) {
         const mc = (await mcRes.json()) as CoinGeckoSimplePrice;
@@ -111,7 +112,7 @@ async function fetchChainTvl(): Promise<{ ethereum: number; total: number } | nu
   try {
     // /v2/chains is rate-limited from CF Workers IPs; use per-chain historical endpoint instead
     const res = await fetch(`${DEFILLAMA_API}/v2/historicalChainTvl/ethereum`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' },
+      signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' },
     });
     if (!res.ok) return null;
     const entries = (await res.json()) as DefiLlamaChainTvlEntry[];
@@ -124,7 +125,7 @@ async function fetchChainTvl(): Promise<{ ethereum: number; total: number } | nu
 
 async function fetchTopEthProtocols(): Promise<Array<{ name: string; tvl: number; change1d: number }>> {
   try {
-    const res = await fetch(`${DEFILLAMA_API}/protocols`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } });
+    const res = await fetch(`${DEFILLAMA_API}/protocols`, { signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } });
     if (!res.ok) return [];
     const protocols = (await res.json()) as DefiLlamaProtocol[];
     return protocols
@@ -143,7 +144,7 @@ async function fetchTopEthProtocols(): Promise<Array<{ name: string; tvl: number
 
 async function fetchTopEthStablecoins(): Promise<Array<{ symbol: string; circulating: number }>> {
   try {
-    const res = await fetch(`${STABLECOINS_API}/stablecoins?includePrices=true`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } });
+    const res = await fetch(`${STABLECOINS_API}/stablecoins?includePrices=true`, { signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } });
     if (!res.ok) return [];
     const data = (await res.json()) as StablecoinsResponse;
     return (data.peggedAssets ?? [])
@@ -168,7 +169,7 @@ async function fetchDexVolume(): Promise<{
     // /overview/dexs/ethereum is rate-limited from CF Workers IPs; use global endpoint and filter by chain
     const res = await fetch(
       `${DEFILLAMA_API}/overview/dexs?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true`,
-      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } }
+      { signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HNTelegramBot/1.0)' } }
     );
     if (!res.ok) return null;
     const data = (await res.json()) as DefiLlamaDexOverview;
@@ -204,7 +205,7 @@ export async function fetchAndFormatEthBrief(kv: KVNamespace): Promise<string> {
   const CACHE_KEY = 'eth:brief';
   const CACHE_TTL = 7200;
 
-  const cached = await kv.get(CACHE_KEY);
+  const cached = await readCache(() => kv.get(CACHE_KEY));
   if (cached) return cached;
 
   const [prices, tvl, protocols, stablecoins, dex] = await Promise.all([
@@ -285,6 +286,6 @@ export async function fetchAndFormatEthBrief(kv: KVNamespace): Promise<string> {
   lines.push('Data: CoinGecko + DeFiLlama');
 
   const message = lines.join('\n');
-  await kv.put(CACHE_KEY, message, { expirationTtl: CACHE_TTL });
+  await writeCache(() => kv.put(CACHE_KEY, message, { expirationTtl: CACHE_TTL }));
   return message;
 }

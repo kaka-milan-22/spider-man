@@ -1,3 +1,4 @@
+import { readCache, writeCache, withTimeout } from './storage';
 import type { Env } from './types';
 import { getConfig } from './config';
 import { displayTime, escapeHtml } from './display';
@@ -135,7 +136,7 @@ function incomplete(data: BriefData): string[] {
 
 async function fetchData(env: Env): Promise<BriefData> {
   const safe = async <T>(name: string, action: () => Promise<T>): Promise<T | null> => {
-    try { return await action(); } catch { console.warn(`Brief source unavailable: ${name}`); return null; }
+    try { return await withTimeout(action, 12000); } catch { console.warn(`Brief source unavailable: ${name}`); return null; }
   };
   // A newly generated brief always requests upstream data, including currency rates.
   const [market, crypto, stocks, exrate, oil, calendar] = await Promise.all([
@@ -158,7 +159,7 @@ function validReport(value: unknown, now: number): value is BriefReport {
 
 export async function readBrief(kv: KVNamespace, id: string, now = Date.now()): Promise<BriefReport | null> {
   if (!UUID.test(id)) return null;
-  const report = await kv.get<BriefReport>(BRIEF_REPORT_PREFIX + id, 'json');
+  const report = await withTimeout(() => kv.get<BriefReport>(BRIEF_REPORT_PREFIX + id, 'json'));
   return validReport(report, now) && report.id === id ? report : null;
 }
 
@@ -177,8 +178,8 @@ async function generateBrief(env: Env): Promise<BriefReport> {
   ].join('\n');
   const report: BriefReport = { version: 1, id: crypto.randomUUID(), generatedAt, html: renderBrief(data, generatedAt), summary };
   // Keep immutable snapshots so previous Telegram buttons never open a different report.
-  await env.HN_STORIES.put(BRIEF_REPORT_PREFIX + report.id, JSON.stringify(report), { expirationTtl: BRIEF_RETENTION_TTL });
-  await env.HN_STORIES.put(BRIEF_LATEST_KEY, report.id, { expirationTtl: BRIEF_TTL });
+  await withTimeout(() => env.HN_STORIES.put(BRIEF_REPORT_PREFIX + report.id, JSON.stringify(report), { expirationTtl: BRIEF_RETENTION_TTL }));
+  await writeCache(() => env.HN_STORIES.put(BRIEF_LATEST_KEY, report.id, { expirationTtl: BRIEF_TTL }));
   return report;
 }
 
@@ -186,9 +187,9 @@ async function generateBrief(env: Env): Promise<BriefReport> {
 const inFlight = new WeakMap<KVNamespace, Promise<BriefReport>>();
 export async function getBrief(env: Env, forceRefresh = false): Promise<BriefReport> {
   if (forceRefresh) return generateBrief(env);
-  const id = await env.HN_STORIES.get(BRIEF_LATEST_KEY);
+  const id = await readCache(() => env.HN_STORIES.get(BRIEF_LATEST_KEY));
   if (id) {
-    const cached = await readBrief(env.HN_STORIES, id);
+    const cached = await readCache(() => readBrief(env.HN_STORIES, id));
     if (cached && Date.now() - cached.generatedAt < BRIEF_TTL * 1000) return cached;
   }
   const pending = inFlight.get(env.HN_STORIES);
@@ -233,7 +234,13 @@ export async function serveBrief(request: Request, env: Env): Promise<Response |
     headers: { ...headers, 'Content-Type': 'text/javascript; charset=utf-8' },
   });
   const id = path.slice('/brief/'.length);
-  const report = await readBrief(env.HN_STORIES, id);
+  let report: BriefReport | null;
+  try { report = await readBrief(env.HN_STORIES, id); }
+  catch {
+    return new Response(request.method === 'HEAD' ? null : '简报存储暂时不可用，请稍后重试。', {
+      status: 503, headers: { ...headers, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' },
+    });
+  }
   if (!report) return new Response(request.method === 'HEAD' ? null : '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>简报已过期</title><body style="background:#16181c;color:#e4e4e2;font:18px/1.8 -apple-system,sans-serif;padding:28px"><h1>简报已过期或不存在</h1><p>请回到 Telegram 群，发送 /brief 获取简报。</p></body></html>', {
     status: 410, headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
   });

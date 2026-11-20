@@ -1,3 +1,4 @@
+import { withTimeout } from './storage';
 import { displayTime, escapeHtml } from './display';
 
 export const MONITORS = {
@@ -47,13 +48,13 @@ async function writeObservation(kv: KVNamespace, key: MonitorKey, startedAt: num
   const checkedAt = Date.now();
   const durationMs = Math.max(0, checkedAt - startedAt);
   try {
-    const previous = await kv.get(`${STATUS_PREFIX}${key}`, 'json');
+    const previous = await withTimeout(() => kv.get(`${STATUS_PREFIX}${key}`, 'json'));
     // Avoid overwriting a newer result when overlapping requests finish out of order.
     if (observation(previous) && previous.checkedAt > checkedAt) return;
-    await kv.put(`${STATUS_PREFIX}${key}`, JSON.stringify({
+    await withTimeout(() => kv.put(`${STATUS_PREFIX}${key}`, JSON.stringify({
       checkedAt, durationMs, ok: result.ok, detail: result.detail.slice(0, 160),
       lastSuccessAt: result.ok ? checkedAt : observation(previous) ? previous.lastSuccessAt : null,
-    } satisfies Observation), { expirationTtl: 30 * 86400 });
+    } satisfies Observation), { expirationTtl: 30 * 86400 }));
   } catch {
     console.warn(`Unable to persist ${key} status`);
   }
@@ -65,7 +66,7 @@ export async function observe<T>(
 ): Promise<T> {
   const startedAt = Date.now();
   let value: T;
-  try { value = await action(); } catch (error) {
+  try { value = await (key === 'telegram' ? action() : withTimeout(action, 14000)); } catch (error) {
     await writeObservation(kv, key, startedAt, { ok: false, detail: safeFailure(error) });
     throw error;
   }
@@ -98,7 +99,7 @@ export async function formatStatus(kv: KVNamespace, webhook: WebhookStatus | nul
   } else lines.push('Webhook：Telegram 状态查询失败');
   const statuses = await Promise.all(Object.entries(MONITORS).map(async ([key, label]) => {
     try {
-      const data = await kv.get(`${STATUS_PREFIX}${key}`, 'json');
+      const data = await withTimeout(() => kv.get(`${STATUS_PREFIX}${key}`, 'json'));
       if (!observation(data)) return `⚪ ${label}：暂无调用记录`;
       return `${data.ok ? '✅' : '⚠️'} ${label} · ${data.durationMs} ms\n`
         + `最近：${displayTime(data.checkedAt)} · ${escapeHtml(data.detail)}\n`

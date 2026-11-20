@@ -123,6 +123,8 @@ Menu visibility does not grant permission or hide messages already posted in the
 `/status` reports observations from actual command calls, not continuous health probes. It queries Telegram Webhook status live.
 Only result metadata, duration and last successful call time are stored under `status:v1:*`, for up to 30 days. Quote payloads, credentials and raw exception text are not stored in these records.
 KV can lag under concurrent use. Cache-based results are labelled: a cache hit is not an upstream health check. Commands show “no record” until used; `/flushcache` resets the records.
+Each diagnostics KV read or write has a one-second deadline. If status storage stalls, commands still return their source results and `/status` marks affected records as unavailable, preserving healthy records.
+Business-cache reads and writes also have one-second deadlines. HN, Ars, exchange rates and ETH commands bypass unavailable caches and preserve fresh results when caching fails. Data-source observations have a 14-second deadline to leave time for the Telegram reply; brief sections have a 12-second deadline and mark missing sources explicitly. `/brief` only sends a link after its report snapshot is saved; a latest-pointer write failure does not discard a saved report. Report-page storage failures return HTTP 503 rather than 410. `/flushcache` bounds each KV operation and its deletion loop, and reports failures or possible partial deletion without claiming success.
 
 | Endpoint | Access |
 | --- | --- |
