@@ -86,17 +86,21 @@ test('missing previous close produces an unavailable change instead of a false z
   assert.doesNotMatch(formatStockPrices(prices), /NaN|Infinity/);
 });
 
-test('ANT excludes the IPO offer price until the first trade is available', async () => {
-  let traded = false;
+test('ANT accepts valid quotes without first-trade metadata', async () => {
+  let metadata = {};
   mock.method(globalThis, 'fetch', async url => quoteResponse(ticker(url), ticker(url) === 'ANT'
-    ? { regularMarketPrice: traded ? 90 : 83, firstTradeDate: traded ? quoteTime : null }
+    ? { regularMarketPrice: 90, ...metadata }
     : {}));
-  const before = await fetchStockPrices();
-  assert.equal(before.find(q => q.symbol === 'ANT').price, null);
-  assert.match(formatStockPrices(before), /ANT\s*: 暂无报价/);
-  assert.ok(before.filter(q => q.symbol !== 'ANT').every(q => q.price === 110));
-  traded = true;
-  assert.equal((await fetchStockPrices()).find(q => q.symbol === 'ANT').price, 90);
+  for (const value of [{}, { firstTradeDate: null }, { firstTradeDate: quoteTime }]) {
+    metadata = value;
+    const prices = await fetchStockPrices();
+    const ant = prices.find(q => q.symbol === 'ANT');
+    assert.equal(ant.price, 90);
+    assert.equal(ant.updatedAt, quoteTime);
+    assert.ok(Math.abs(ant.changePercent + 10) < 1e-9);
+    assert.match(formatStockPrices(prices), /ANT\s*: \$90\.00/);
+    assert.ok(prices.filter(q => q.symbol !== 'ANT').every(q => q.price === 110));
+  }
 });
 
 test('uses BTC-style HTML price rows and formats quote time in UTC+8', () => {
