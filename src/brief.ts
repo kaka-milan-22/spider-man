@@ -19,6 +19,15 @@ export const BRIEF_RETENTION_TTL = 7 * 86400;
 // Refresh the latest report after the watchlist change; historical snapshots stay readable.
 export const BRIEF_LATEST_KEY = 'brief:v2:latest';
 export const BRIEF_REPORT_PREFIX = 'brief:v1:report:';
+const BRIEF_SNAPSHOT_WRITE_TIMEOUT_MS = 10_000;
+
+export class BriefSnapshotTimeoutError extends Error {
+  constructor() {
+    super('日报快照写入 Cloudflare Workers KV 超时（' + BRIEF_SNAPSHOT_WRITE_TIMEOUT_MS / 1000 + ' 秒），Worker 未能确认保存成功。');
+    this.name = 'BriefSnapshotTimeoutError';
+  }
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SECTIONS = [
   ['market', '市场概览', '/market'], ['crypto', 'Crypto 行情', '/btc'],
@@ -178,7 +187,15 @@ async function generateBrief(env: Env): Promise<BriefReport> {
   ].join('\n');
   const report: BriefReport = { version: 1, id: crypto.randomUUID(), generatedAt, html: renderBrief(data, generatedAt), summary };
   // Keep immutable snapshots so previous Telegram buttons never open a different report.
-  await withTimeout(() => env.HN_STORIES.put(BRIEF_REPORT_PREFIX + report.id, JSON.stringify(report), { expirationTtl: BRIEF_RETENTION_TTL }));
+  try {
+    await withTimeout(
+      () => env.HN_STORIES.put(BRIEF_REPORT_PREFIX + report.id, JSON.stringify(report), { expirationTtl: BRIEF_RETENTION_TTL }),
+      BRIEF_SNAPSHOT_WRITE_TIMEOUT_MS,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') throw new BriefSnapshotTimeoutError();
+    throw error;
+  }
   await writeCache(() => env.HN_STORIES.put(BRIEF_LATEST_KEY, report.id, { expirationTtl: BRIEF_TTL }));
   return report;
 }

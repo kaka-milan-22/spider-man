@@ -129,6 +129,34 @@ test('scheduled execution forces fresh data, bypasses currency cache and updates
   assert.equal(s.messages[0].reply_markup.inline_keyboard[0][0].url, `https://worker.example/brief/${fresh.id}`);
 });
 
+test('a scheduled snapshot write times out after its 10-second budget and sends one failure notice', async () => {
+  const s = setup();
+  const put = s.env.HN_STORIES.put;
+  let snapshotStarted = false;
+  mock.method(s.env.HN_STORIES, 'put', (key, value, options) => {
+    if (!key.startsWith(BRIEF_REPORT_PREFIX)) return put(key, value, options);
+    snapshotStarted = true;
+    return new Promise(() => {});
+  });
+  const schedule = globalThis.setTimeout;
+  const deadlines = [];
+  mock.method(globalThis, 'setTimeout', (callback, ms, ...args) => {
+    if (ms === 10000) deadlines.push(ms);
+    return schedule(callback, ms === 10000 ? 1 : ms, ...args);
+  });
+  const pending = [];
+  await worker.scheduled({ cron: '0 3 * * *' }, s.env, { waitUntil: promise => pending.push(promise) });
+  await assert.rejects(Promise.all(pending), { name: 'BriefSnapshotTimeoutError' });
+  assert.equal(snapshotStarted, true);
+  assert.deepEqual(deadlines, [10000]);
+  assert.equal(s.records.has(BRIEF_LATEST_KEY), false);
+  assert.equal(JSON.parse(s.records.get('status:v1:telegram')).ok, false);
+  assert.equal(s.messages.length, 1);
+  assert.equal(s.messages[0].chat_id, s.env.TELEGRAM_CHAT_ID);
+  assert.match(s.messages[0].text, /财经日报发送失败[\s\S]*KV 超时（10 秒）/);
+  assert.equal(s.messages[0].reply_markup, undefined);
+});
+
 test('10:30 HN cron sends news to the configured group without generating a market brief', async () => {
   const s = setup();
   delete s.env.TELEGRAM_WEBHOOK_SECRET;

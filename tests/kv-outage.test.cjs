@@ -11,7 +11,7 @@ afterEach(() => mock.restoreAll());
 function accelerateDeadlines(includeSources = false) {
   const schedule = globalThis.setTimeout;
   mock.method(globalThis, 'setTimeout', (callback, ms, ...args) =>
-    schedule(callback, ms === 1000 || (includeSources && ms === 14000) ? 1 : ms, ...args));
+    schedule(callback, ms === 1000 || ms === 10000 || (includeSources && ms === 14000) ? 1 : ms, ...args));
 }
 
 function sources() {
@@ -64,7 +64,7 @@ for (const stalled of ['get', 'put']) {
       const message = sent.at(-1);
       if (command === '/flushcache') assert.match(message.text, /清理失败或超时/);
       else if (command === '/brief' && stalled === 'put') {
-        assert.match(message.text, /执行失败/);
+        assert.match(message.text, /执行失败[\s\S]*KV 超时（10 秒）/);
         assert.equal(message.reply_markup, undefined, 'never send an unpersisted report link');
       } else assert.doesNotMatch(message.text, /执行失败/, command + ' must preserve successful source results');
     }

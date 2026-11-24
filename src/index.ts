@@ -26,7 +26,7 @@ import { getArsTopStories } from './ars-api';
 import { formatArsArticles } from './formatters';
 import { fetchExchangeRates, formatExchangeRates } from './exrate-api';
 import { fetchAndFormatEthBrief } from './eth-brief';
-import { sendBrief, serveBrief } from './brief';
+import { BriefSnapshotTimeoutError, sendBrief, serveBrief } from './brief';
 import { syncCommandMenus, migrateWebhook } from './command-menu';
 import { probeCryptoSources } from './crypto-probe';
 import { lookupCoin, formatCoin } from './coin';
@@ -104,7 +104,20 @@ async function fetchTopHNStories(kv: KVNamespace): Promise<ProcessedStory[]> {
 
 async function handleScheduled(env: Env): Promise<void> {
   console.log('Starting fresh market brief scheduled job');
-  await observe(env.HN_STORIES, 'telegram', () => sendBrief(env, true));
+  try {
+    await observe(env.HN_STORIES, 'telegram', () => sendBrief(env, true));
+  } catch (error) {
+    if (error instanceof BriefSnapshotTimeoutError) {
+      const config = getConfig(env);
+      try {
+        await sendMessage(config.telegramBotToken, config.telegramChatId,
+          '⚠️ <b>财经日报发送失败</b>\n' + error.message);
+      } catch {
+        console.error('Failed to send the market brief timeout notice to Telegram');
+      }
+    }
+    throw error;
+  }
   console.log('Fresh market brief sent successfully');
 }
 
